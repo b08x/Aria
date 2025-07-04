@@ -1,0 +1,417 @@
+
+
+import { GoogleGenAI, GenerateContentResponse, Content, Part } from "@google/genai";
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createMistral } from '@ai-sdk/mistral';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { streamText as vercelStreamText, generateText as vercelGenerateText, LanguageModel, CoreMessage, TextPart, ImagePart } from 'ai';
+import { Settings, Section, FileAttachment, Message, Role, Provider, ApiKeyStatus, SearchResults } from '../types';
+import { PROVIDERS } from "../constants";
+
+// --- Client & Model Instantiation ---
+
+const getGoogleGenAIClient = (apiKey: string): GoogleGenAI => {
+    if (!apiKey) throw new Error('API key is not configured.');
+    return new GoogleGenAI({ apiKey });
+};
+
+const getLanguageModel = (settings: Settings): LanguageModel => {
+    const { provider, apiKey, model } = settings;
+    const providerConfig = PROVIDERS[provider];
+
+    if (!apiKey) throw new Error('API key is not configured.');
+
+    switch (providerConfig.api) {
+        case 'google': {
+            const google = createGoogleGenerativeAI({ apiKey });
+            return google(model);
+        }
+        case 'openai': {
+            const openai = createOpenAI({ apiKey });
+            return openai(model);
+        }
+        case 'mistral': {
+            const mistral = createMistral({ apiKey });
+            return mistral(model);
+        }
+        case 'anthropic': {
+            const anthropic = createAnthropic({ apiKey });
+            return anthropic(model);
+        }
+        case 'openai_compatible': {
+            // The 'apiKey' property in createOpenAI handles the 'Authorization: Bearer ...' header.
+            // For OpenRouter, we remove custom headers like 'X-Title' that can cause CORS preflight issues
+            // when the request is made from a browser client. The browser will automatically send the Referer.
+            const headers: Record<string, string> = {};
+            
+            return createOpenAI({
+                baseURL: providerConfig.baseURL,
+                apiKey,
+                headers,
+            })(model);
+        }
+        default:
+            throw new Error(`Unsupported provider API type: ${(providerConfig as any).api}`);
+    }
+};
+
+// --- API Key Validation ---
+
+export const validateApiKey = async (settings: Settings): Promise<ApiKeyStatus> => {
+    if (!settings.apiKey) return 'unverified';
+
+    try {
+        if (settings.provider === 'google') {
+            // Use the native @google/genai SDK for Google validation, as it's also used for streaming and image generation.
+            // This ensures consistency and may provide more specific error messages.
+            const ai = getGoogleGenAIClient(settings.apiKey);
+            await ai.models.generateContent({
+                model: settings.model,
+                contents: [{ role: 'user', parts: [{ text: 'validate' }] }],
+            });
+        } else {
+            // Use the Vercel AI SDK for all other providers.
+            const model = getLanguageModel(settings);
+            await vercelGenerateText({ model, prompt: 'validate', maxTokens: 1 });
+        }
+        return 'valid';
+    } catch (e: any) {
+        console.error(`API Key validation failed for ${settings.provider}:`, e);
+
+        // Errors can be nested, especially with the Vercel SDK. Check the cause property.
+        const errorMessage = (e?.message || (e.cause as any)?.message || '').toLowerCase();
+        // Check for status codes in different possible locations within the error object.
+        const statusCode = e?.status || e?.statusCode || (e.cause as any)?.status;
+
+        const isRateLimited = (
+            errorMessage.includes('rate limit') ||
+            errorMessage.includes('capacity exceeded') ||
+            errorMessage.includes('quota') ||
+            errorMessage.includes('service unavailable') ||
+            statusCode === 429 ||
+            statusCode === 500 || // Treat server errors as temporary
+            statusCode === 503
+        );
+
+        if (isRateLimited) {
+            return 'ratelimited';
+        }
+
+        // For errors like 404 (Not Found / "Requested entity was not found"),
+        // 400 (Bad Request / "API key not valid"), 401 (Unauthorized), 403 (Forbidden),
+        // we classify the setup as invalid.
+        return 'invalid';
+    }
+};
+
+
+// --- Message & History Builders ---
+
+const buildGoogleHistory = (messages: Message[]): Content[] => {
+    return messages.map(msg => ({
+        role: msg.role === Role.ASSISTANT ? 'model' : 'user',
+        parts: [{ text: msg.content }],
+    }));
+};
+
+const buildCoreMessages = (messages: Message[]): CoreMessage[] => {
+    return messages.map((msg): CoreMessage => {
+        if (msg.role === Role.USER) {
+            const content: (TextPart | ImagePart)[] = [{ type: 'text', text: msg.content }];
+            if (msg.file) {
+                if (msg.file.type.startsWith('image/')) {
+                    content.push({ type: 'image', image: `data:${msg.file.type};base64,${msg.file.base64Data}` });
+                } else {
+                    // For non-image files, append a note.
+                    const textPart = content[0] as TextPart;
+                    textPart.text += `\n\n[Attached File: ${msg.file.name}]`;
+                }
+            }
+
+            const firstPart = content[0];
+            const messageContent = content.length === 1 && firstPart.type === 'text' ? firstPart.text : content;
+
+            return { role: 'user', content: messageContent };
+        } else { // ASSISTANT
+            // Assistant messages in this app are text-only.
+            return { role: 'assistant', content: msg.content };
+        }
+    });
+};
+
+
+// --- Streaming Chat ---
+
+// Vercel AI SDK implementation for most providers
+const streamTextVercel = async (
+    settings: Settings,
+    system: string,
+    messages: Message[],
+) => {
+    const model = getLanguageModel(settings);
+    const coreMessages = buildCoreMessages(messages);
+
+    const result = await vercelStreamText({
+        model,
+        system,
+        messages: coreMessages,
+        temperature: settings.temperature,
+        topP: settings.topP,
+    });
+
+    return {
+        textStream: result.textStream,
+        getFinalResponse: () => undefined, // No equivalent to Google's grounding metadata in the Vercel SDK response
+    };
+};
+
+// Original @google/genai implementation to preserve grounding metadata
+const streamTextGoogle = async (
+    settings: Settings,
+    system: string,
+    messages: Message[],
+    file?: FileAttachment | null,
+): Promise<{ textStream: AsyncGenerator<string>; getFinalResponse: () => GenerateContentResponse | undefined }> => {
+    const { apiKey, model: modelName, temperature, topP } = settings;
+    const ai = getGoogleGenAIClient(apiKey);
+
+    const history = buildGoogleHistory(messages.slice(0, -1));
+    const latestUserMessage = messages[messages.length - 1];
+    
+    const userParts: Part[] = [{ text: latestUserMessage.content }];
+    if (file) {
+        userParts.push({ inlineData: { mimeType: file.type, data: file.base64Data } });
+    }
+    
+    const contents: Content[] = [...history, { role: 'user', parts: userParts }];
+
+    let finalResponse: GenerateContentResponse | undefined;
+
+    const stream = await ai.models.generateContentStream({
+        model: modelName,
+        contents,
+        config: {
+            systemInstruction: system,
+            tools: [{ googleSearch: {} }],
+            temperature,
+            topP,
+        }
+    });
+
+    async function* textStreamGenerator(): AsyncGenerator<string> {
+        for await (const chunk of stream) {
+            finalResponse = chunk;
+            yield chunk.text;
+        }
+    }
+
+    return { textStream: textStreamGenerator(), getFinalResponse: () => finalResponse };
+};
+
+// Dispatcher function that chooses the correct implementation
+export const streamText = (
+    settings: Settings,
+    system: string,
+    messages: Message[],
+    file?: FileAttachment | null,
+) => {
+    if (settings.provider === 'google') {
+        return streamTextGoogle(settings, system, messages, file);
+    }
+    const vercelMessages = file ? [...messages.slice(0, -1), { ...messages[messages.length - 1], file }] : messages;
+    return streamTextVercel(settings, system, vercelMessages);
+};
+
+
+// --- Non-Streaming Generation ---
+
+const generateText = async (
+    settings: Settings,
+    prompt: string,
+    systemInstruction?: string,
+    responseMimeType?: "text/plain" | "application/json"
+): Promise<string> => {
+    const model = getLanguageModel(settings);
+    const result = await vercelGenerateText({
+        model,
+        prompt,
+        system: systemInstruction,
+        ...(responseMimeType === 'application/json' && { mode: 'json' as const }),
+    });
+    return result.text;
+};
+
+const parseJsonFromText = (text: string): any => {
+    let jsonStr = text.trim();
+    const fenceRegex = /^```(\w*)?\s*\n?(.*?)\n?\s*```$/s;
+    const match = jsonStr.match(fenceRegex);
+    if (match && match[2]) {
+        jsonStr = match[2].trim();
+    }
+    return JSON.parse(jsonStr);
+};
+
+
+// --- ARIA Specific Functions ---
+const CURRICULUM_SYSTEM_INSTRUCTION = `You are an expert curriculum designer. Your task is to generate a structured learning plan based on the user's request.
+Respond ONLY with the curriculum in markdown format. Do not add any conversational text, introductions, or summaries.
+The output must be a clean list of modules and lessons.
+Use ## for major modules or topics. These are parent sections.
+Use ### for individual lessons or sub-topics within a module. These are child sections.
+Example:
+## Module 1: Introduction
+### Lesson 1.1: What is Python?
+### Lesson 1.2: Setting up your environment
+## Module 2: Core Concepts
+### Lesson 2.1: Variables and Data Types`;
+
+const DIAGRAM_SYSTEM_INSTRUCTION = `You are an expert diagramming assistant. Your task is to generate a Mermaid.js diagram based on the user's request.
+**IMPORTANT RULES:**
+1.  You MUST respond with a single, valid JSON object.
+2.  The JSON object must have two keys: "title" (a concise, descriptive string for the diagram) and "code" (a string containing the Mermaid.js syntax).
+3.  Inside the "code" string, all text within a diagram node MUST be enclosed in double quotes (e.g., A["This is node text"]).
+4.  For line breaks inside a node's text, you MUST use the <br> tag. Do not use raw newline characters (\\n).
+5.  Do not include any other text, explanations, or markdown formatting outside of the single JSON object.
+Example Response:
+{
+  "title": "User Authentication Flow",
+  "code": "graph TD\\n    A[\\"User Enters Credentials\\"] --> B{\\"Check Database\\"}\\n    B -->|\\"Valid\\"| C[\\"Access Granted\\"]\\n    B -->|\\"Invalid\\"| D[\\"Show Error Message<br>Try again\\"]"
+}`;
+
+const LESSON_INTRO_SYSTEM_INSTRUCTION = `You are an AI Assistant kicking off a new lesson. Your response must be structured as follows:
+1. Start with a brief, engaging one-paragraph introduction to the topic.
+2. Follow with a section titled "### What to Expect".
+3. Under this heading, provide a Markdown bulleted list of 2-4 key concepts or skills the user will learn.
+4. Conclude by asking a question to prompt the user for input before you begin teaching. **IMPORTANT**: You MUST wrap this final question in a markdown blockquote (e.g., "> Does this sound good?").
+Do not provide any other content.`;
+
+const parseSectionsFromMarkdown = (content: string): Section[] => {
+    const sections: Section[] = [];
+    const lines = content.split('\n');
+    let parentModule: Section | null = null;
+
+    lines.forEach(line => {
+        const h2Match = line.match(/^##\s+(.*)/);
+        const h3Match = line.match(/^###\s+(.*)/);
+
+        if (h2Match) {
+            const title = h2Match[1].trim();
+            const id = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${sections.length}`;
+            const newModule: Section = { id, title, level: 2, hasContent: false };
+            sections.push(newModule);
+            parentModule = newModule;
+        } else if (h3Match && parentModule) {
+            const title = h3Match[1].trim();
+            const id = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}-${sections.length}`;
+            sections.push({ id, title, level: 3 });
+            parentModule.hasContent = true; // Mark the parent module as having lessons
+        }
+    });
+
+    return sections;
+};
+
+export async function generateCurriculum(topic: string, settings: Settings): Promise<Section[]> {
+    const text = await generateText(settings, `Generate a curriculum for: ${topic}`, CURRICULUM_SYSTEM_INSTRUCTION);
+    if (!text) throw new Error("Failed to generate curriculum. The model returned an empty response.");
+    const sections = parseSectionsFromMarkdown(text);
+    if (sections.length === 0) throw new Error("Could not parse a curriculum from the model's response.");
+    return sections;
+}
+
+export async function generateRelatedTopics(topic: string, settings: Settings): Promise<string[]> {
+    const prompt = `Given the main topic "${topic}", list 5 to 7 seemingly disparate but tangentially related concepts or historical events that would provide a richer, interdisciplinary context. Respond with only a JSON array of strings.`;
+    const text = await generateText(settings, prompt, undefined, "application/json");
+    try {
+        const topics = parseJsonFromText(text);
+        return Array.isArray(topics) && topics.every(t => typeof t === 'string') ? topics : [];
+    } catch { return []; }
+}
+
+export async function generateQuiz(moduleContext: string, chatHistory: Message[], settings: Settings): Promise<string> {
+    const historySummary = chatHistory.slice(-10).map(m => `${m.role}: ${m.content}`).join('\n');
+    const prompt = `Based on the topic "${moduleContext}" and the recent conversation history, generate a short, 3-question multiple-choice quiz to test understanding.
+**FORMATTING RULES:**
+1. Provide the questions in Markdown format.
+2. The question text itself must be bold (e.g., **"1. What is the capital of France?"**).
+3. The correct answer must be indicated with an asterisk (*).
+4. Do not provide any introductory or concluding text, only the quiz itself.
+
+Recent history:
+${historySummary}`;
+    return await generateText(settings, prompt);
+}
+
+export async function generateDiagramData(prompt: string, settings: Settings): Promise<{ title: string, code: string }> {
+    const text = await generateText(settings, prompt, DIAGRAM_SYSTEM_INSTRUCTION, "application/json");
+    try {
+        const data = parseJsonFromText(text);
+        if (typeof data.title === 'string' && typeof data.code === 'string') return data;
+        throw new Error("Invalid JSON structure received from model.");
+    } catch (e) {
+        console.error("Failed to parse JSON for diagram:", text);
+        throw new Error("The AI returned an invalid format for the diagram data.");
+    }
+}
+
+export async function generateLessonIntro(topic: string, settings: Settings): Promise<string> {
+    const prompt = `The topic is: "${topic}"`;
+    return await generateText(settings, prompt, LESSON_INTRO_SYSTEM_INSTRUCTION);
+}
+
+export async function generateImage(prompt: string, settings: Settings): Promise<string> {
+    if (settings.provider !== 'google') {
+        throw new Error('Image generation is currently only available with the Google provider.');
+    }
+    if (!settings.apiKey) {
+        throw new Error('Google API key is not configured.');
+    }
+    const ai = getGoogleGenAIClient(settings.apiKey);
+    
+    try {
+        const response = await ai.models.generateImages({
+            model: 'imagen-3.0-generate-002',
+            prompt: prompt,
+            config: { numberOfImages: 1, outputMimeType: 'image/png' },
+        });
+
+        if (!response.generatedImages || response.generatedImages.length === 0 || !response.generatedImages[0].image.imageBytes) {
+            throw new Error("The model did not return a valid image.");
+        }
+
+        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
+        return `data:image/png;base64,${base64ImageBytes}`;
+    } catch (e: any) {
+        console.error("Image generation failed:", e);
+        throw new Error(e.message || "An unexpected error occurred while generating the image.");
+    }
+}
+
+// --- Google Custom Search ---
+
+export const fetchSearchResults = async (
+    query: string,
+    apiKey: string,
+    cseId: string,
+): Promise<SearchResults> => {
+    if (!apiKey || !cseId) {
+        throw new Error("Google Custom Search API Key or Search Engine ID is not configured.");
+    }
+
+    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${encodeURIComponent(query)}`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            const errorData = await response.json();
+            const message = errorData.error?.message || `Request failed with status ${response.status}`;
+            throw new Error(message);
+        }
+        const data = await response.json();
+        return data as SearchResults;
+    } catch (e: any) {
+        console.error("Google Custom Search API error:", e);
+        throw new Error(e.message || "An unexpected error occurred while fetching search results.");
+    }
+};

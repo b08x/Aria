@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARIA: Adaptive Research & Information Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'background': '#181A20', // Deep navy-black
+              'surface': '#252832',   // Darker slate blue
+              'primary': '#9FB1C1',   // Soft light blue-gray for text
+              'secondary': '#51667A', // Medium slate blue for muted elements
+              'accent': '#D4A237',     // Vibrant gold
+              'accent-dark': '#C67D34',  // Burnt orange
+            },
+            keyframes: {
+                'pulse-sm': {
+                  '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+                  '50%': { opacity: 0.6, transform: 'scale(1.05)' },
+                },
+                fadeIn: {
+                  'from': { opacity: 0, transform: 'translateY(10px)' },
+                  'to': { opacity: 1, transform: 'translateY(0)' },
+                }
+            },
+            animation: {
+                'pulse-sm': 'pulse-sm 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            }
+          },
+        },
+      };
+    </script>
+    <style>
+      /* For custom scrollbars */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: var(--tw-color-secondary, #51667A);
+        border-radius: 4px;
+        border: 2px solid var(--tw-bg-surface, #252832);
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: var(--tw-color-primary, #9FB1C1);
+      }
+      
+      /* Added from Message.tsx for paragraph animations */
+      .paragraph-container {
+        animation: fadeIn 0.5s ease-out both;
+        animation-delay: var(--delay);
+      }
+      
+      /* Custom Prose styles for markdown rendering */
+      .prose {
+        --tw-prose-body: theme('colors.primary / 90%');
+        --tw-prose-headings: theme('colors.primary');
+        --tw-prose-links: theme('colors.accent');
+        --tw-prose-bold: theme('colors.primary');
+        --tw-prose-counters: theme('colors.accent');
+        --tw-prose-bullets: theme('colors.accent');
+        --tw-prose-hr: theme('colors.secondary / 30%');
+        --tw-prose-quotes: theme('colors.primary / 95%');
+        --tw-prose-quote-borders: theme('colors.accent');
+        --tw-prose-code: theme('colors.accent-dark');
+        --tw-prose-pre-code: theme('colors.primary / 80%');
+        --tw-prose-pre-bg: theme('colors.background');
+      }
+
+      /* General Prose adjustments */
+      .prose p, .prose ul, .prose ol {
+        line-height: 1.7;
+      }
+
+      /* Headings */
+      .prose h2, .prose h3, .prose h4 {
+        color: var(--tw-prose-headings);
+        scroll-margin-top: 80px; /* Offset for sticky header */
+      }
+      .prose h2 {
+        border-bottom: 1px solid var(--tw-prose-hr);
+        padding-bottom: 0.4em;
+        margin-bottom: 0.8em;
+        color: theme('colors.accent');
+      }
+      .prose h3 {
+        color: theme('colors.primary');
+      }
+
+      /* Bold */
+      .prose strong {
+        color: theme('colors.primary');
+      }
+
+      /* Links */
+      .prose a {
+        text-decoration: none;
+        transition: color 0.2s, text-decoration 0.2s;
+        border-bottom: 1px solid theme('colors.accent / 50%');
+      }
+      .prose a:hover {
+        color: theme('colors.accent-dark');
+        border-bottom-color: theme('colors.accent-dark');
+      }
+
+      /* Code blocks */
+      .prose pre {
+        border: 1px solid var(--tw-prose-hr);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      .prose code:not(pre > code) {
+        background-color: theme('colors.accent-dark / 20%');
+        color: theme('colors.accent-dark');
+        padding: 0.2em 0.4em;
+        margin: 0;
+        font-size: 85%;
+        border-radius: 0.3rem;
+      }
+      .prose pre code {
+        background-color: transparent;
+        color: var(--tw-prose-pre-code);
+        padding: 0;
+        font-size: inherit;
+        border-radius: 0;
+      }
+
+      /* Blockquotes (Used for Questions) */
+      .prose blockquote {
+        border-left-width: 4px;
+        border-left-color: var(--tw-prose-quote-borders);
+        background-color: theme('colors.accent / 5%');
+        padding: 0.5rem 1rem;
+        margin-left: 0;
+        margin-right: 0;
+        font-style: normal;
+        color: var(--tw-prose-quotes);
+      }
+      .prose blockquote p {
+        margin: 0.5rem 0;
+      }
+      .prose blockquote p:first-of-type::before,
+      .prose blockquote p:last-of-type::after {
+        content: '';
+      }
+
+      /* Ordered Lists (Used for Steps) */
+      .prose ol > li {
+        padding-bottom: 1rem;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid var(--tw-prose-hr);
+      }
+      .prose ol > li:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+      .prose ol li::marker {
+        color: var(--tw-prose-counters);
+        font-weight: bold;
+      }
+
+      /* Unordered Lists */
+      .prose ul li::marker {
+        color: var(--tw-prose-bullets);
+      }
+
+      /* Horizontal Rule */
+      .prose hr {
+        border-color: var(--tw-prose-hr);
+        margin-top: 2em;
+        margin-bottom: 2em;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "ai": "https://esm.sh/ai@^3.2.33",
+    "@ai-sdk/google": "https://esm.sh/@ai-sdk/google@0.0.31",
+    "@ai-sdk/openai": "https://esm.sh/@ai-sdk/openai@0.0.18",
+    "@ai-sdk/anthropic": "https://esm.sh/@ai-sdk/anthropic@0.0.23",
+    "@ai-sdk/mistral": "https://esm.sh/@ai-sdk/mistral@0.0.20",
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1",
+    "@google/genai": "https://esm.sh/@google/genai@^1.8.0",
+    "mermaid": "https://esm.sh/mermaid@^11.8.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-background text-primary">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
