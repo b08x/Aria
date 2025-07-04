@@ -5,6 +5,8 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createMistral } from '@ai-sdk/mistral';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { streamText } from 'ai';
 import { streamText as vercelStreamText, generateText as vercelGenerateText, LanguageModel, CoreMessage, TextPart, ImagePart } from 'ai';
 import { Settings, Section, FileAttachment, Message, Role, Provider, ApiKeyStatus, SearchResults } from '../types';
 import { PROVIDERS } from "../constants";
@@ -22,7 +24,10 @@ const getLanguageModel = (settings: Settings): LanguageModel => {
 
     if (!apiKey) throw new Error('API key is not configured.');
 
-    switch (providerConfig.api) {
+    // Extend the type to include 'openai_compatible'
+    type ProviderApiType = 'google' | 'openai' | 'mistral' | 'anthropic' | 'openrouter' | 'openai_compatible';
+
+    switch (providerConfig.api as ProviderApiType) {
         case 'google': {
             const google = createGoogleGenerativeAI({ apiKey });
             return google(model);
@@ -38,6 +43,17 @@ const getLanguageModel = (settings: Settings): LanguageModel => {
         case 'anthropic': {
             const anthropic = createAnthropic({ apiKey });
             return anthropic(model);
+        }
+        case 'openrouter': {
+            const openrouter = createOpenRouter({ 
+                apiKey,
+                baseURL: 'https://openrouter.ai/api/v1',
+                headers: {
+                    'HTTP-Referer': 'https://aria-ai.app',
+                    'X-Title': 'Aria AI Assistant'
+                }
+            });
+            return openrouter(model);
         }
         case 'openai_compatible': {
             // The 'apiKey' property in createOpenAI handles the 'Authorization: Bearer ...' header.
@@ -72,26 +88,75 @@ export const validateApiKey = async (settings: Settings): Promise<ApiKeyStatus> 
             });
         } else {
             // Use the Vercel AI SDK for all other providers.
-            const model = getLanguageModel(settings);
-            await vercelGenerateText({ model, prompt: 'validate', maxTokens: 1 });
+            let validationSettings = settings;
+            
+            // For OpenRouter, use a simple, reliable model for validation
+            if (settings.provider === 'openrouter') {
+                validationSettings = {
+                    ...settings,
+                    model: 'openai/gpt-3.5-turbo' // Use a reliable model for validation
+                };
+            }
+            
+            const model = getLanguageModel(validationSettings);
+            // Create abort controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            try {
+                await vercelGenerateText({ 
+                    model, 
+                    prompt: 'Hi', 
+                    maxTokens: 1,
+                    abortSignal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
         }
         return 'valid';
     } catch (e: any) {
         console.error(`API Key validation failed for ${settings.provider}:`, e);
+        
+        // Additional debugging for OpenRouter
+        if (settings.provider === 'openrouter') {
+            console.error('OpenRouter validation error details:', {
+                message: e?.message,
+                status: e?.status,
+                statusCode: e?.statusCode,
+                cause: e?.cause,
+                response: e?.response?.data || e?.response,
+                stack: e?.stack
+            });
+        }
 
         // Errors can be nested, especially with the Vercel SDK. Check the cause property.
         const errorMessage = (e?.message || (e.cause as any)?.message || '').toLowerCase();
         // Check for status codes in different possible locations within the error object.
-        const statusCode = e?.status || e?.statusCode || (e.cause as any)?.status;
+        const statusCode = e?.status || e?.statusCode || (e.cause as any)?.status || (e.cause as any)?.statusCode;
+
+        // Handle OpenRouter specific errors
+        if (settings.provider === 'openrouter') {
+            // OpenRouter returns 401 for invalid API keys
+            if (statusCode === 401 || errorMessage.includes('unauthorized') || errorMessage.includes('invalid credentials')) {
+                return 'invalid';
+            }
+            // OpenRouter returns 402 for insufficient credits
+            if (statusCode === 402 || errorMessage.includes('insufficient credits')) {
+                return 'ratelimited';
+            }
+        }
 
         const isRateLimited = (
             errorMessage.includes('rate limit') ||
             errorMessage.includes('capacity exceeded') ||
             errorMessage.includes('quota') ||
             errorMessage.includes('service unavailable') ||
+            errorMessage.includes('insufficient credits') ||
             statusCode === 429 ||
             statusCode === 500 || // Treat server errors as temporary
-            statusCode === 503
+            statusCode === 503 ||
+            statusCode === 502
         );
 
         if (isRateLimited) {
