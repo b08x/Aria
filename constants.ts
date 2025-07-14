@@ -5,7 +5,7 @@ import { Settings, SFLConfig } from './types';
 export const PROVIDERS = {
   google: {
     name: 'Google',
-    models: ['gemini-2.5-flash-preview-04-17'],
+    models: ['gemini-2.5-flash'],
     api: 'google' as const,
   },
   openai: {
@@ -26,14 +26,14 @@ export const PROVIDERS = {
   openrouter: {
     name: 'OpenRouter',
     models: [
-        'openai/gpt-3.5-turbo',
-        'openai/gpt-4o',
         'mistralai/mistral-large-latest',
-        'google/gemini-flash-1.5',
-        'anthropic/claude-3-opus-20240229',
+        'google/gemini-2.5-flash',
+        'openai/gpt-4o',
+        'anthropic/claude-3-opus',
         'meta-llama/llama-3-70b-instruct'
     ],
-    api: 'openrouter' as const,
+    api: 'openai_compatible' as const,
+    baseURL: 'https://openrouter.ai/api/v1',
   },
 };
 
@@ -52,7 +52,7 @@ export const INITIAL_SETTINGS: Settings = {
 };
 
 export const MODEL_GUIDE: Record<string, {name: string, description: string, strengths: string}> = {
-    'gemini-2.5-flash-preview-04-17': {
+    'gemini-2.5-flash': {
         name: 'Gemini 2.5 Flash',
         description: 'A lightweight, fast, and cost-efficient model ideal for high-frequency tasks, summarization, and chat applications where speed is critical.',
         strengths: 'Best for: Rapid-fire chat, document summarization, and tasks where low latency is more important than deep, nuanced reasoning.'
@@ -107,22 +107,17 @@ export const MODEL_GUIDE: Record<string, {name: string, description: string, str
         description: "Mistral's flagship model accessed via OpenRouter, offering top-tier reasoning capabilities.",
         strengths: 'Best for: Complex reasoning, code generation, and leveraging OpenRouter\'s ecosystem.'
     },
-    'google/gemini-flash-1.5': {
-        name: 'Gemini 1.5 Flash (OpenRouter)',
-        description: "Google's fast and versatile multimodal model, accessed via OpenRouter.",
+    'google/gemini-2.5-flash': {
+        name: 'Gemini 2.5 Flash (OpenRouter)',
+        description: "Google's fast and versatile model, accessed via OpenRouter.",
         strengths: 'Best for: Rapid chat, summarization, and multimodal tasks via a unified API.'
-    },
-    'openai/gpt-3.5-turbo': {
-        name: 'GPT-3.5 Turbo (OpenRouter)',
-        description: "A fast and reliable model that's a great balance between cost, speed, and performance, accessed via OpenRouter.",
-        strengths: 'Best for: General-purpose chat, content generation, and everyday tasks via OpenRouter\'s ecosystem.'
     },
     'openai/gpt-4o': {
         name: 'GPT-4o (OpenRouter)',
         description: 'The latest flagship model from OpenAI, accessed via OpenRouter.',
         strengths: 'Best for: Top-tier intelligence, multimodality, and leveraging OpenRouter\'s ecosystem.'
     },
-    'anthropic/claude-3-opus-20240229': {
+    'anthropic/claude-3-opus': {
         name: 'Claude 3 Opus (OpenRouter)',
         description: "Anthropic's most powerful model via OpenRouter, excelling at complex analysis and strategic tasks.",
         strengths: 'Best for: Research, strategic analysis, and tasks requiring deep contextual understanding.'

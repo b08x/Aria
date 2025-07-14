@@ -28,9 +28,9 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
                 <div className="p-4 space-y-4">
                     {[...Array(5)].map((_, i) => (
                         <div key={i} className="bg-background/50 p-3 rounded-lg animate-pulse">
-                            <div className="h-4 bg-secondary/50 rounded w-3/4 mb-2"></div>
-                            <div className="h-3 bg-secondary/30 rounded w-full mb-3"></div>
-                            <div className="h-3 bg-secondary/30 rounded w-5/6"></div>
+                            <div className="h-4 bg-muted/50 rounded w-3/4 mb-2"></div>
+                            <div className="h-3 bg-muted/30 rounded w-full mb-3"></div>
+                            <div className="h-3 bg-muted/30 rounded w-5/6"></div>
                         </div>
                     ))}
                 </div>
@@ -39,7 +39,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
         
         if (error) {
             return (
-                <div className="p-4 m-4 text-sm text-red-300 bg-red-900/50 rounded-md">
+                <div className="p-4 m-4 text-sm text-red-800 bg-red-100 rounded-md">
                     <p className="font-bold">Search Failed</p>
                     <p>{error}</p>
                 </div>
@@ -70,8 +70,8 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
     };
 
     return (
-        <aside className="w-96 h-screen bg-surface flex flex-col border-l border-secondary/50 flex-shrink-0">
-            <header className="p-4 border-b border-secondary/50 flex items-center gap-3 flex-shrink-0">
+        <aside className="w-96 h-screen bg-surface flex flex-col border-l border-primary/20 flex-shrink-0">
+            <header className="p-4 border-b border-primary/20 flex items-center gap-3 flex-shrink-0">
                 <MagnifyingGlassIcon className="w-6 h-6 text-accent" />
                 <div className="flex-1 min-w-0">
                    <h2 className="text-lg font-bold text-primary truncate">

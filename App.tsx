@@ -1,7 +1,6 @@
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import mermaid from 'mermaid';
-import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults } from './types';
+import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults, Provider } from './types';
 import { generateCurriculum, generateDiagramData, streamText, generateRelatedTopics, generateQuiz, generateLessonIntro, generateImage, fetchSearchResults } from './services/aiService';
 import { playTTS, stopTTS } from './services/elevenLabsService';
 import { INITIAL_SETTINGS, DEFAULT_SFL_CONFIG } from './constants';
@@ -12,6 +11,7 @@ import LandingPage from './components/LandingPage';
 import ProviderSetupPage from './components/ProviderSetupPage';
 import SFLWizardPage from './components/SFLWizardPage';
 import ResearchPanel from './components/ResearchPanel';
+import { useEnvSettings } from './hooks/useEnvSettings';
 
 type Page = 'landing' | 'setupProvider' | 'setupSFL' | 'main';
 
@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(INITIAL_SETTINGS);
   const [apiKeyStatus, setApiKeyStatus] = useState<Record<string, ApiKeyStatus>>({});
   const [ttsPlayback, setTtsPlayback] = useState<TTSPlayback>({ isPlaying: false, messageId: null, audio: null });
+  const [dynamicModels, setDynamicModels] = useState<Record<string, string[]>>({});
 
   // ARIA State
   const [sflConfig, setSflConfig] = useState<SFLConfig>(DEFAULT_SFL_CONFIG);
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>('home');
   const [checkpoints, setCheckpoints] = useState<Record<string, Message[]>>({ 'home': [] });
   const [viewingDiagram, setViewingDiagram] = useState<SavedDiagram | null>(null);
+  const [initialContextFiles, setInitialContextFiles] = useState<FileAttachment[]>([]);
   
   // Research Panel State
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
@@ -40,11 +42,21 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [attachedFile, setAttachedFile] = useState<FileAttachment | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
+
+  // Initialize settings with environment variables
+  useEnvSettings(setSettings, setApiKeyStatus);
 
   useEffect(() => {
-    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
   }, []);
+
+  // Check if we have valid environment variables and can skip setup
+  const hasValidEnvConfig = useMemo(() => {
+    const hasApiKey = settings.apiKey && settings.apiKey.length > 0;
+    const hasValidProvider = apiKeyStatus[settings.provider] === 'valid';
+    return hasApiKey && hasValidProvider;
+  }, [settings.apiKey, settings.provider, apiKeyStatus]);
 
   const messages = useMemo(() => {
     return checkpoints[currentSessionId || 'home'] || [];
@@ -59,12 +71,24 @@ const App: React.FC = () => {
   }, [currentSessionId]);
 
   const systemPrompt = useMemo(() => {
-    let basePrompt = "You are ARIA, the Adaptive Research & Information Assistant. Your responses must be grounded using Google Search to provide accurate, up-to-date information. If the user uploads a file, analyze it and incorporate it into your response. When asked to elaborate, first ask a clarifying question to better tailor the information. Wrap this clarifying question in a markdown blockquote (e.g., '> What specifically would you like to know?'). DO NOT provide the full elaboration immediately.";
+    let basePrompt = "You are ARIA, the Adaptive Research & Information Assistant. Your responses must be grounded using Google Search to provide accurate, up-to-date information.";
+
+    if (initialContextFiles.length > 0) {
+        const fileContext = initialContextFiles.map(file =>
+            `--- START OF SOURCE FILE: ${file.name} ---\n${file.content}\n--- END OF SOURCE FILE: ${file.name} ---`
+        ).join('\n\n');
+        basePrompt += `\n\nThe user has provided the following source documents. Base your curriculum and all responses on this content:\n${fileContext}`;
+    }
+
+    basePrompt += "\n\nFor individual messages, the user may attach additional files. Their content will be provided below the user's prompt, marked by '--- START OF FILE: [filename] ---' and '--- END OF FILE: [filename] ---'. Analyze these files and incorporate them into your response for that specific message.";
+    basePrompt += "\n\nWhen asked to elaborate, first ask a clarifying question to better tailor the information. Wrap this clarifying question in a markdown blockquote (e.g., '> What specifically would you like to know?'). DO NOT provide the full elaboration immediately.";
+
     if (sflConfig) {
         if (sflConfig.sflTenor.aiPersona) basePrompt += `\n- Your persona: ${sflConfig.sflTenor.aiPersona}.`;
         if (sflConfig.sflTenor.targetAudience) basePrompt += `\n- Tailor your language for: ${sflConfig.sflTenor.targetAudience}.`;
         if (sflConfig.sflMode.outputFormat) basePrompt += `\n- Format your response as: ${sflConfig.sflMode.outputFormat}.`;
     }
+
     const activeSection = curriculum?.sections.find(s => s.id === currentSessionId);
     if (activeSection) {
         basePrompt += `\n\n# CURRENT LESSON\nFocus your response exclusively on teaching the following topic: "${activeSection.title}".`;
@@ -72,7 +96,7 @@ const App: React.FC = () => {
         basePrompt += `\n\n# CURRENT LESSON\nFocus your response exclusively on teaching the following related topic: "${currentSessionId}".`;
     }
     return basePrompt;
-  }, [sflConfig, currentSessionId, curriculum]);
+  }, [sflConfig, currentSessionId, curriculum, initialContextFiles]);
 
   const handleFetchSearch = useCallback(async (query: string) => {
     if (!settings.googleCseApiKey || !settings.googleCseId) {
@@ -91,15 +115,16 @@ const App: React.FC = () => {
     }
   }, [settings.googleCseApiKey, settings.googleCseId]);
 
-  const handleSFLWizardFinish = async (finalConfig: SFLConfig, topic: string) => {
+  const handleSFLWizardFinish = async (finalConfig: SFLConfig, topic: string, files: FileAttachment[]) => {
     setSflConfig(finalConfig);
+    setInitialContextFiles(files);
     setIsLoading(true);
     setPage('main');
     try {
       setLoadingMessage('Generating your personalized curriculum...');
-      const sections = await generateCurriculum(topic, settings);
+      const sections = await generateCurriculum(topic, files, settings);
       setLoadingMessage('Discovering related topics for deeper learning...');
-      const relatedTopics = await generateRelatedTopics(topic, settings);
+      const relatedTopics = await generateRelatedTopics(topic, files, settings);
       setCurriculum({ sections, relatedTopics });
        const initialMessage: Message = { id: Date.now().toString(), role: Role.ASSISTANT, content: `I've generated your personalized curriculum and found some related topics for **${topic}**. You can see them in the sidebar. Click any lesson to begin!` };
        setMessages(prev => [...prev, initialMessage]);
@@ -113,46 +138,80 @@ const App: React.FC = () => {
 
   const handleSendMessage = useCallback(async (prompt: string, isRetry = false) => {
     const finalPrompt = (isRetry && messages.length > 0) ? messages[messages.length - 1].content : prompt;
-    if (!finalPrompt.trim()) return;
+    if (!finalPrompt.trim() && attachedFiles.length === 0) return;
     
     setError(null);
     setIsLoading(true);
     stopTTS(ttsPlayback);
     setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
     
-    const userMessage: Message = { id: Date.now().toString(), role: Role.USER, content: finalPrompt, file: attachedFile || undefined };
+    const userMessage: Message = { id: Date.now().toString(), role: Role.USER, content: finalPrompt, files: attachedFiles };
     const currentMessages = isRetry ? messages.slice(0, -1) : [...messages, userMessage];
     setMessages(currentMessages);
     
-    const assistantMessageId = (Date.now() + 1).toString();
-    const assistantMessage: Message = { id: assistantMessageId, role: Role.ASSISTANT, content: '' };
+    let currentMessageId = (Date.now() + 1).toString();
+    const assistantMessage: Message = { id: currentMessageId, role: Role.ASSISTANT, content: '' };
     setMessages(prev => [...prev, assistantMessage]);
-    setAttachedFile(null);
+    setAttachedFiles([]);
 
     try {
-        const result = await streamText(settings, systemPrompt, currentMessages, attachedFile);
+        const result = await streamText(settings, systemPrompt, currentMessages);
+        let buffer = '';
 
-        let fullResponse = '';
         for await (const delta of result.textStream) {
-            fullResponse += delta;
-            setMessages(prev => prev.map(msg => msg.id === assistantMessageId ? { ...msg, content: fullResponse } : msg));
+            buffer += delta;
+            const parts = buffer.split(/\n\n+/);
+
+            if (parts.length > 1) {
+                const completeParagraph = parts.slice(0, -1).join('\n\n');
+                const remainder = parts.slice(-1)[0];
+
+                if (completeParagraph.trim()) {
+                    setMessages(prev => prev.map(msg =>
+                        msg.id === currentMessageId ? { ...msg, content: completeParagraph } : msg
+                    ));
+
+                    currentMessageId = `${Date.now()}-${Math.random()}`;
+                    setMessages(prev => [...prev, { id: currentMessageId, role: Role.ASSISTANT, content: remainder }]);
+                    buffer = remainder;
+                }
+            } else {
+                setMessages(prev => prev.map(msg =>
+                    msg.id === currentMessageId ? { ...msg, content: buffer } : msg
+                ));
+            }
         }
+        
+        setMessages(prev => prev.filter(m => m.content.trim() !== '' || m.role === 'user'));
 
         const finalResponse = result.getFinalResponse();
         const groundingMetadata = finalResponse?.candidates?.[0]?.groundingMetadata;
 
         if (groundingMetadata && groundingMetadata.groundingChunks && groundingMetadata.groundingChunks.length > 0) {
-            setMessages(prev => prev.map(msg => msg.id === assistantMessageId ? { ...msg, groundingMetadata: groundingMetadata.groundingChunks as any[] } : msg));
+            setMessages(prev => {
+                const lastAssistantMsgIndex = prev.map(m => m.role).lastIndexOf(Role.ASSISTANT);
+                 if (lastAssistantMsgIndex !== -1) {
+                    const newMessages = [...prev];
+                    const targetMessage = newMessages[lastAssistantMsgIndex];
+                    newMessages[lastAssistantMsgIndex] = {
+                        ...targetMessage,
+                        content: targetMessage.content.trim(), // Ensure no trailing spaces before adding metadata
+                        groundingMetadata: groundingMetadata.groundingChunks as any[],
+                    };
+                    return newMessages;
+                }
+                return prev;
+            });
         }
     } catch (e: any) {
         console.error(e);
         const errorMessage = e.message || 'An unknown error occurred.';
         setError(`API Error: ${errorMessage}`);
-        setMessages(prev => prev.slice(0, -1));
+        setMessages(prev => prev.filter(msg => msg.id !== currentMessageId && msg.role !== Role.ASSISTANT));
     } finally {
         setIsLoading(false);
     }
-  }, [messages, settings, systemPrompt, ttsPlayback, attachedFile, setMessages]);
+  }, [messages, settings, systemPrompt, ttsPlayback, attachedFiles, setMessages, initialContextFiles]);
 
   const handleGenerateDiagram = useCallback(async (text: string) => {
       setIsLoading(true);
@@ -282,21 +341,36 @@ const App: React.FC = () => {
       handleSendMessage(lastUserMessage.content, true);
     }
   },[messages, handleSendMessage]);
+
+  // Handle start from landing page - skip setup if env vars are available
+  const handleStart = useCallback(() => {
+    if (hasValidEnvConfig) {
+      setPage('setupSFL');
+    } else {
+      setPage('setupProvider');
+    }
+  }, [hasValidEnvConfig]);
   
   const renderPage = () => {
     switch(page) {
       case 'landing':
-        return <LandingPage onStart={() => setPage('setupProvider')} />;
+        return <LandingPage onStart={handleStart} />;
       case 'setupProvider':
         return <ProviderSetupPage 
                 settings={settings} 
                 setSettings={setSettings}
                 apiKeyStatus={apiKeyStatus}
                 setApiKeyStatus={setApiKeyStatus}
-                onComplete={() => setPage('setupSFL')} 
+                onComplete={() => setPage('setupSFL')}
+                dynamicModels={dynamicModels}
+                setDynamicModels={setDynamicModels}
                />;
       case 'setupSFL':
-        return <SFLWizardPage onFinish={handleSFLWizardFinish} />;
+        return <SFLWizardPage 
+                    onFinish={handleSFLWizardFinish}
+                    settings={settings}
+                    onBack={() => hasValidEnvConfig ? setPage('landing') : setPage('setupProvider')}
+                />;
       case 'main':
         const lessonTitle = curriculum?.sections.find(s => s.id === currentSessionId)?.title || (currentSessionId !== 'home' && curriculum?.relatedTopics.includes(currentSessionId!) ? currentSessionId : null);
         
@@ -313,6 +387,7 @@ const App: React.FC = () => {
               onViewDiagram={setViewingDiagram}
               onDeleteDiagram={(id) => setSavedDiagrams(prev => prev.filter(d => d.id !== id))}
               onTakeQuiz={handleTakeQuiz}
+              dynamicModels={dynamicModels}
             />
             <ChatPanel
               messages={messages}
@@ -325,8 +400,8 @@ const App: React.FC = () => {
               onElaborate={(text) => handleSendMessage(`Tell me more about: ${text}`)}
               onGenerateDiagram={handleGenerateDiagram}
               onGenerateImage={handleGenerateImage}
-              attachedFile={attachedFile}
-              setAttachedFile={setAttachedFile}
+              attachedFiles={attachedFiles}
+              setAttachedFiles={setAttachedFiles}
               ttsSettings={{
                   enabled: settings.ttsEnabled,
                   onToggleTTS: handleTTS,

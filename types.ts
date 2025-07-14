@@ -24,14 +24,14 @@ export interface Settings {
 export interface FileAttachment {
   name: string;
   type: string;
-  base64Data: string;
+  content: string;
 }
 
 export interface Message {
   id: string;
   role: Role;
   content: string;
-  file?: FileAttachment;
+  files?: FileAttachment[];
   groundingMetadata?: any[];
   image?: {
     url: string;

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Message as MessageType, FileAttachment } from '../types';
 import ChatInput from './ChatInput';
@@ -16,8 +15,8 @@ interface ChatPanelProps {
   onElaborate: (text: string) => void;
   onGenerateDiagram: (text: string) => void;
   onGenerateImage: (text: string) => void;
-  attachedFile: FileAttachment | null;
-  setAttachedFile: (file: FileAttachment | null) => void;
+  attachedFiles: FileAttachment[];
+  setAttachedFiles: (files: FileAttachment[]) => void;
   ttsSettings: {
     enabled: boolean;
     onToggleTTS: (message: MessageType) => void;
@@ -36,13 +35,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     onElaborate,
     onGenerateDiagram,
     onGenerateImage,
-    attachedFile,
-    setAttachedFile,
+    attachedFiles,
+    setAttachedFiles,
     ttsSettings,
 }) => {
   return (
     <main className="flex flex-1 flex-col h-screen">
-      <header className="flex items-center p-4 border-b border-secondary/50 shadow-md bg-surface/80 backdrop-blur-sm sticky top-0 z-10">
+      <header className="flex items-center p-4 border-b border-primary/20 shadow-md bg-surface/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center">
           <BotIcon className="w-8 h-8 mr-3 text-accent" />
           <h1 className="text-2xl font-bold text-primary">ARIA</h1>
@@ -74,20 +73,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         )}
       </div>
 
-      <footer className="p-4 border-t border-secondary/50 bg-background">
+      <footer className="p-4 border-t border-primary/20 bg-background">
         {error && (
-            <div className="p-3 mb-3 text-sm text-center text-red-300 bg-red-900/50 rounded-md">
+            <div className="p-3 mb-3 text-sm text-center text-red-800 bg-red-100 rounded-md">
                 <p>
                     <strong>Error:</strong> {error}
-                    <button onClick={() => setError(null)} className="ml-4 font-bold text-red-200 hover:text-white">Close</button>
+                    <button onClick={() => setError(null)} className="ml-4 font-bold text-red-700 hover:text-red-900">Close</button>
                 </p>
             </div>
         )}
         <ChatInput 
             onSendMessage={onSendMessage} 
             isLoading={isLoading}
-            attachedFile={attachedFile}
-            setAttachedFile={setAttachedFile}
+            attachedFiles={attachedFiles}
+            setAttachedFiles={setAttachedFiles}
         />
         <p className="text-xs text-center text-secondary mt-2">
             AI responses are grounded with Google Search and may be inaccurate. Verify important information.

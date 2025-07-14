@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { AcademicCapIcon } from './icons/AcademicCapIcon';
 
@@ -7,7 +8,7 @@ interface LandingPageProps {
 }
 
 const FeatureCard: React.FC<{ icon: React.ReactNode, title: string, children: React.ReactNode }> = ({ icon, title, children }) => (
-    <div className="bg-surface/50 p-6 rounded-lg border border-secondary/50">
+    <div className="bg-surface/50 p-6 rounded-lg border border-primary/20">
         <div className="flex items-center gap-4 mb-3">
             <div className="bg-accent/20 p-2 rounded-full">
                 {icon}

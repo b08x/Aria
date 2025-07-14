@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Curriculum, SavedDiagram, Settings, Provider, ApiKeyStatus } from '../types';
 import { TrashIcon } from './icons/TrashIcon';
@@ -18,6 +19,7 @@ interface SidebarProps {
   onViewDiagram: (diagram: SavedDiagram) => void;
   onDeleteDiagram: (diagramId: string) => void;
   onTakeQuiz: (moduleId: string) => void;
+  dynamicModels: Record<string, string[]>;
 }
 
 type ActiveTab = 'lessons' | 'diagrams' | 'settings';
@@ -33,6 +35,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onViewDiagram,
   onDeleteDiagram,
   onTakeQuiz,
+  dynamicModels,
 }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('lessons');
   
@@ -40,7 +43,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     setSettings(prev => {
       const newState = { ...prev, [field]: value };
       if (field === 'provider') {
-        newState.model = PROVIDERS[value as Provider].models[0];
+        const newProviderKey = value as Provider;
+        const availableModels = dynamicModels[newProviderKey] || PROVIDERS[newProviderKey].models;
+        newState.model = availableModels[0];
       }
       return newState;
     });
@@ -64,7 +69,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const commonInputClasses = "w-full px-3 py-2 bg-background border border-secondary/50 text-primary rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transition-colors placeholder-secondary";
+  const commonInputClasses = "w-full px-3 py-2 bg-background border border-primary/20 text-primary rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transition-colors placeholder-secondary";
+  const modelList = dynamicModels[settings.provider] || PROVIDERS[settings.provider].models;
 
   const renderSettings = () => (
     <div className="p-4 space-y-6">
@@ -88,7 +94,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div>
                 <label htmlFor="model-select" className="block text-sm font-medium text-primary/80 mb-1">Model</label>
                 <select id="model-select" value={settings.model} onChange={e => handleSettingsChange('model', e.target.value)} className={commonInputClasses}>
-                    {PROVIDERS[settings.provider].models.map(model => (
+                    {modelList.map(model => (
                         <option key={model} value={model}>{model}</option>
                     ))}
                 </select>
@@ -119,7 +125,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     role="switch"
                     aria-checked={settings.ttsEnabled}
                     onClick={() => handleSettingsChange('ttsEnabled', !settings.ttsEnabled)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.ttsEnabled ? 'bg-accent' : 'bg-secondary'}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.ttsEnabled ? 'bg-accent' : 'bg-muted'}`}
                 >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.ttsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
@@ -250,7 +256,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
         activeTab === tab
           ? 'text-accent border-accent'
-          : 'text-secondary border-transparent hover:text-primary hover:border-secondary'
+          : 'text-secondary border-transparent hover:text-primary hover:border-primary/20'
       }`}
     >
       {label}
@@ -258,12 +264,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   );
 
   return (
-    <aside className="w-96 h-screen bg-surface flex flex-col border-r border-secondary/50 flex-shrink-0">
-      <header className="p-4 border-b border-secondary/50 flex items-center gap-3">
+    <aside className="w-96 h-screen bg-surface flex flex-col border-r border-primary/20 flex-shrink-0">
+      <header className="p-4 border-b border-primary/20 flex items-center gap-3">
         <AcademicCapIcon className="w-8 h-8 text-accent"/>
         <h1 className="text-xl font-bold text-primary">ARIA</h1>
       </header>
-      <div className="border-b border-secondary/50 flex-shrink-0">
+      <div className="border-b border-primary/20 flex-shrink-0">
         <nav className="flex justify-around">
           <TabButton tab="lessons" label="Learn" />
           <TabButton tab="diagrams" label={`Diagrams (${savedDiagrams.length})`} />

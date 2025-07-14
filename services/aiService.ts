@@ -1,14 +1,13 @@
 
 
+
 import { GoogleGenAI, GenerateContentResponse, Content, Part } from "@google/genai";
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createMistral } from '@ai-sdk/mistral';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { streamText } from 'ai';
-import { streamText as vercelStreamText, generateText as vercelGenerateText, LanguageModel, CoreMessage, TextPart, ImagePart } from 'ai';
-import { Settings, Section, FileAttachment, Message, Role, Provider, ApiKeyStatus, SearchResults } from '../types';
+import { streamText as vercelStreamText, generateText as vercelGenerateText, LanguageModel, CoreMessage } from 'ai';
+import { Settings, Section, Message, Role, ApiKeyStatus, SearchResults, FileAttachment } from '../types';
 import { PROVIDERS } from "../constants";
 
 // --- Client & Model Instantiation ---
@@ -24,10 +23,7 @@ const getLanguageModel = (settings: Settings): LanguageModel => {
 
     if (!apiKey) throw new Error('API key is not configured.');
 
-    // Extend the type to include 'openai_compatible'
-    type ProviderApiType = 'google' | 'openai' | 'mistral' | 'anthropic' | 'openrouter' | 'openai_compatible';
-
-    switch (providerConfig.api as ProviderApiType) {
+    switch (providerConfig.api) {
         case 'google': {
             const google = createGoogleGenerativeAI({ apiKey });
             return google(model);
@@ -44,21 +40,7 @@ const getLanguageModel = (settings: Settings): LanguageModel => {
             const anthropic = createAnthropic({ apiKey });
             return anthropic(model);
         }
-        case 'openrouter': {
-            const openrouter = createOpenRouter({ 
-                apiKey,
-                baseURL: 'https://openrouter.ai/api/v1',
-                headers: {
-                    'HTTP-Referer': 'https://aria-ai.app',
-                    'X-Title': 'Aria AI Assistant'
-                }
-            });
-            return openrouter(model);
-        }
         case 'openai_compatible': {
-            // The 'apiKey' property in createOpenAI handles the 'Authorization: Bearer ...' header.
-            // For OpenRouter, we remove custom headers like 'X-Title' that can cause CORS preflight issues
-            // when the request is made from a browser client. The browser will automatically send the Referer.
             const headers: Record<string, string> = {};
             
             return createOpenAI({
@@ -78,94 +60,28 @@ export const validateApiKey = async (settings: Settings): Promise<ApiKeyStatus> 
     if (!settings.apiKey) return 'unverified';
 
     try {
-        if (settings.provider === 'google') {
-            // Use the native @google/genai SDK for Google validation, as it's also used for streaming and image generation.
-            // This ensures consistency and may provide more specific error messages.
-            const ai = getGoogleGenAIClient(settings.apiKey);
-            await ai.models.generateContent({
-                model: settings.model,
-                contents: [{ role: 'user', parts: [{ text: 'validate' }] }],
-            });
-        } else {
-            // Use the Vercel AI SDK for all other providers.
-            let validationSettings = settings;
-            
-            // For OpenRouter, use a simple, reliable model for validation
-            if (settings.provider === 'openrouter') {
-                validationSettings = {
-                    ...settings,
-                    model: 'openai/gpt-3.5-turbo' // Use a reliable model for validation
-                };
-            }
-            
-            const model = getLanguageModel(validationSettings);
-            // Create abort controller for timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            try {
-                await vercelGenerateText({ 
-                    model, 
-                    prompt: 'Hi', 
-                    maxTokens: 1,
-                    abortSignal: controller.signal
-                });
-            } finally {
-                clearTimeout(timeoutId);
-            }
-        }
+        // Always use Vercel AI SDK to avoid CORS issues
+        const model = getLanguageModel(settings);
+        await vercelGenerateText({ model, prompt: 'validate', maxTokens: 1 });
         return 'valid';
     } catch (e: any) {
         console.error(`API Key validation failed for ${settings.provider}:`, e);
-        
-        // Additional debugging for OpenRouter
-        if (settings.provider === 'openrouter') {
-            console.error('OpenRouter validation error details:', {
-                message: e?.message,
-                status: e?.status,
-                statusCode: e?.statusCode,
-                cause: e?.cause,
-                response: e?.response?.data || e?.response,
-                stack: e?.stack
-            });
-        }
-
-        // Errors can be nested, especially with the Vercel SDK. Check the cause property.
         const errorMessage = (e?.message || (e.cause as any)?.message || '').toLowerCase();
-        // Check for status codes in different possible locations within the error object.
-        const statusCode = e?.status || e?.statusCode || (e.cause as any)?.status || (e.cause as any)?.statusCode;
-
-        // Handle OpenRouter specific errors
-        if (settings.provider === 'openrouter') {
-            // OpenRouter returns 401 for invalid API keys
-            if (statusCode === 401 || errorMessage.includes('unauthorized') || errorMessage.includes('invalid credentials')) {
-                return 'invalid';
-            }
-            // OpenRouter returns 402 for insufficient credits
-            if (statusCode === 402 || errorMessage.includes('insufficient credits')) {
-                return 'ratelimited';
-            }
-        }
+        const statusCode = e?.status || e?.statusCode || (e.cause as any)?.status;
 
         const isRateLimited = (
             errorMessage.includes('rate limit') ||
             errorMessage.includes('capacity exceeded') ||
             errorMessage.includes('quota') ||
             errorMessage.includes('service unavailable') ||
-            errorMessage.includes('insufficient credits') ||
             statusCode === 429 ||
-            statusCode === 500 || // Treat server errors as temporary
-            statusCode === 503 ||
-            statusCode === 502
+            statusCode === 500 ||
+            statusCode === 503
         );
 
         if (isRateLimited) {
             return 'ratelimited';
         }
-
-        // For errors like 404 (Not Found / "Requested entity was not found"),
-        // 400 (Bad Request / "API key not valid"), 401 (Unauthorized), 403 (Forbidden),
-        // we classify the setup as invalid.
         return 'invalid';
     }
 };
@@ -174,32 +90,33 @@ export const validateApiKey = async (settings: Settings): Promise<ApiKeyStatus> 
 // --- Message & History Builders ---
 
 const buildGoogleHistory = (messages: Message[]): Content[] => {
-    return messages.map(msg => ({
-        role: msg.role === Role.ASSISTANT ? 'model' : 'user',
-        parts: [{ text: msg.content }],
-    }));
+    return messages.map(msg => {
+        let text = msg.content;
+        if (msg.role === 'user' && msg.files && msg.files.length > 0) {
+            const fileContents = msg.files.map(file =>
+                `\n\n--- START OF FILE: ${file.name} ---\n${file.content}\n--- END OF FILE: ${file.name} ---`
+            ).join('');
+            text += fileContents;
+        }
+        return {
+            role: msg.role === Role.ASSISTANT ? 'model' : 'user',
+            parts: [{ text: text }],
+        }
+    });
 };
 
 const buildCoreMessages = (messages: Message[]): CoreMessage[] => {
     return messages.map((msg): CoreMessage => {
         if (msg.role === Role.USER) {
-            const content: (TextPart | ImagePart)[] = [{ type: 'text', text: msg.content }];
-            if (msg.file) {
-                if (msg.file.type.startsWith('image/')) {
-                    content.push({ type: 'image', image: `data:${msg.file.type};base64,${msg.file.base64Data}` });
-                } else {
-                    // For non-image files, append a note.
-                    const textPart = content[0] as TextPart;
-                    textPart.text += `\n\n[Attached File: ${msg.file.name}]`;
-                }
+            let combinedContent = msg.content;
+            if (msg.files && msg.files.length > 0) {
+                const fileContents = msg.files.map(file => 
+                    `\n\n--- START OF FILE: ${file.name} ---\n${file.content}\n--- END OF FILE: ${file.name} ---`
+                ).join('');
+                combinedContent += fileContents;
             }
-
-            const firstPart = content[0];
-            const messageContent = content.length === 1 && firstPart.type === 'text' ? firstPart.text : content;
-
-            return { role: 'user', content: messageContent };
+            return { role: 'user', content: combinedContent };
         } else { // ASSISTANT
-            // Assistant messages in this app are text-only.
             return { role: 'assistant', content: msg.content };
         }
     });
@@ -208,7 +125,6 @@ const buildCoreMessages = (messages: Message[]): CoreMessage[] => {
 
 // --- Streaming Chat ---
 
-// Vercel AI SDK implementation for most providers
 const streamTextVercel = async (
     settings: Settings,
     system: string,
@@ -227,16 +143,14 @@ const streamTextVercel = async (
 
     return {
         textStream: result.textStream,
-        getFinalResponse: () => undefined, // No equivalent to Google's grounding metadata in the Vercel SDK response
+        getFinalResponse: () => undefined,
     };
 };
 
-// Original @google/genai implementation to preserve grounding metadata
 const streamTextGoogle = async (
     settings: Settings,
     system: string,
     messages: Message[],
-    file?: FileAttachment | null,
 ): Promise<{ textStream: AsyncGenerator<string>; getFinalResponse: () => GenerateContentResponse | undefined }> => {
     const { apiKey, model: modelName, temperature, topP } = settings;
     const ai = getGoogleGenAIClient(apiKey);
@@ -244,10 +158,15 @@ const streamTextGoogle = async (
     const history = buildGoogleHistory(messages.slice(0, -1));
     const latestUserMessage = messages[messages.length - 1];
     
-    const userParts: Part[] = [{ text: latestUserMessage.content }];
-    if (file) {
-        userParts.push({ inlineData: { mimeType: file.type, data: file.base64Data } });
+    let combinedText = latestUserMessage.content;
+    if (latestUserMessage.files && latestUserMessage.files.length > 0) {
+        const fileContents = latestUserMessage.files.map(file =>
+            `\n\n--- START OF FILE: ${file.name} ---\n${file.content}\n--- END OF FILE: ${file.name} ---`
+        ).join('');
+        combinedText += fileContents;
     }
+
+    const userParts: Part[] = [{ text: combinedText }];
     
     const contents: Content[] = [...history, { role: 'user', parts: userParts }];
 
@@ -274,18 +193,13 @@ const streamTextGoogle = async (
     return { textStream: textStreamGenerator(), getFinalResponse: () => finalResponse };
 };
 
-// Dispatcher function that chooses the correct implementation
 export const streamText = (
     settings: Settings,
     system: string,
     messages: Message[],
-    file?: FileAttachment | null,
 ) => {
-    if (settings.provider === 'google') {
-        return streamTextGoogle(settings, system, messages, file);
-    }
-    const vercelMessages = file ? [...messages.slice(0, -1), { ...messages[messages.length - 1], file }] : messages;
-    return streamTextVercel(settings, system, vercelMessages);
+    // Always use Vercel AI SDK to avoid CORS issues with direct API calls
+    return streamTextVercel(settings, system, messages);
 };
 
 
@@ -317,6 +231,63 @@ const parseJsonFromText = (text: string): any => {
     return JSON.parse(jsonStr);
 };
 
+
+// --- Model Discovery ---
+
+export const fetchAvailableModels = async (settings: Settings): Promise<string[]> => {
+    const { provider, apiKey } = settings;
+    const providerConfig = PROVIDERS[provider];
+    const defaultModels = providerConfig.models;
+
+    if (!apiKey) {
+        return defaultModels;
+    }
+
+    try {
+        let fetchedModels: string[] = [];
+        switch (provider) {
+            case 'google': {
+                const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Google API request failed with status ${response.status}`);
+                const data = await response.json();
+                fetchedModels = data.models
+                    ?.filter((m: any) => m.supportedGenerationMethods?.includes('generateContent') && !m.name.includes('embedding'))
+                    .map((m: any) => m.name.replace(/^models\//, '')) || [];
+                break;
+            }
+            case 'openai':
+            case 'openrouter': {
+                const url = `${providerConfig.api === 'openai_compatible' ? providerConfig.baseURL : 'https://api.openai.com/v1'}/models`;
+                const response = await fetch(url, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+                if (!response.ok) throw new Error(`OpenAI-compatible API request failed with status ${response.status}`);
+                const data = await response.json();
+                fetchedModels = data.data?.map((m: any) => m.id) || [];
+                break;
+            }
+            case 'mistral': {
+                const url = 'https://api.mistral.ai/v1/models';
+                const response = await fetch(url, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+                if (!response.ok) throw new Error(`Mistral API request failed with status ${response.status}`);
+                const data = await response.json();
+                fetchedModels = data.data?.map((m: any) => m.id) || [];
+                break;
+            }
+            case 'anthropic':
+                // Anthropic doesn't have a public models list API, so we just use the default.
+                return defaultModels;
+            default:
+                return defaultModels;
+        }
+        // Return a sorted union of default and fetched models.
+        const combined = [...new Set([...defaultModels, ...fetchedModels])];
+        return combined.sort((a, b) => a.localeCompare(b));
+
+    } catch (error) {
+        console.error(`Failed to fetch models for ${provider}:`, error);
+        return defaultModels; // Fallback to default list on any error
+    }
+};
 
 // --- ARIA Specific Functions ---
 const CURRICULUM_SYSTEM_INSTRUCTION = `You are an expert curriculum designer. Your task is to generate a structured learning plan based on the user's request.
@@ -377,21 +348,46 @@ const parseSectionsFromMarkdown = (content: string): Section[] => {
     return sections;
 };
 
-export async function generateCurriculum(topic: string, settings: Settings): Promise<Section[]> {
-    const text = await generateText(settings, `Generate a curriculum for: ${topic}`, CURRICULUM_SYSTEM_INSTRUCTION);
+export async function generateCurriculum(topic: string, files: FileAttachment[], settings: Settings): Promise<Section[]> {
+    let prompt = `Generate a curriculum for: ${topic}`;
+
+    if (files.length > 0) {
+        const fileContent = files.map(f => `--- START OF FILE: ${f.name} ---\n${f.content}\n--- END OF FILE: ${f.name} ---`).join('\n\n');
+        prompt += `\n\nBase the curriculum on the following source material:\n${fileContent}`;
+    }
+
+    const text = await generateText(settings, prompt, CURRICULUM_SYSTEM_INSTRUCTION);
     if (!text) throw new Error("Failed to generate curriculum. The model returned an empty response.");
     const sections = parseSectionsFromMarkdown(text);
     if (sections.length === 0) throw new Error("Could not parse a curriculum from the model's response.");
     return sections;
 }
 
-export async function generateRelatedTopics(topic: string, settings: Settings): Promise<string[]> {
-    const prompt = `Given the main topic "${topic}", list 5 to 7 seemingly disparate but tangentially related concepts or historical events that would provide a richer, interdisciplinary context. Respond with only a JSON array of strings.`;
+export async function generateRelatedTopics(topic: string, files: FileAttachment[], settings: Settings): Promise<string[]> {
+    let prompt = `Given the main topic "${topic}", list 5 to 7 seemingly disparate but tangentially related concepts or historical events that would provide a richer, interdisciplinary context.`;
+    
+    if (files.length > 0) {
+        const fileContent = files.map(f => `--- START OF FILE: ${f.name} ---\n${f.content}\n--- END OF FILE: ${f.name} ---`).join('\n\n');
+        prompt += `\n\nUse the following source material for context:\n${fileContent}`;
+    }
+    
+    prompt += "\n\nRespond with only a JSON array of strings.";
+    
     const text = await generateText(settings, prompt, undefined, "application/json");
     try {
         const topics = parseJsonFromText(text);
         return Array.isArray(topics) && topics.every(t => typeof t === 'string') ? topics : [];
     } catch { return []; }
+}
+
+export async function generateTopicFromFiles(files: FileAttachment[], settings: Settings): Promise<string> {
+    const systemInstruction = "Based on the content of the following documents, suggest a concise and descriptive topic title (5-10 words) for a learning curriculum. Respond with only the title text, nothing else. Do not include quotes or any other formatting.";
+
+    const fileContent = files.map(f => `--- START OF FILE: ${f.name} ---\n${f.content}\n--- END OF FILE: ${f.name} ---`).join('\n\n');
+    const prompt = `Here is the content of the uploaded files:\n${fileContent}`;
+    
+    const text = await generateText(settings, prompt, systemInstruction);
+    return text.trim().replace(/["']/g, ''); // Clean up any quotes
 }
 
 export async function generateQuiz(moduleContext: string, chatHistory: Message[], settings: Settings): Promise<string> {

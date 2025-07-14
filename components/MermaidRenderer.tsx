@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState, memo } from 'react';
 import mermaid from 'mermaid';
 
@@ -35,9 +36,9 @@ const MermaidRenderer: React.FC<MermaidRendererProps> = ({ id, code, onRender })
   }, [id, code, onRender]);
 
   return (
-    <div className="mermaid-container my-4 p-4 bg-background/50 rounded-lg border border-secondary/50">
+    <div className="mermaid-container my-4 p-4 bg-background/50 rounded-lg border border-primary/20">
       {error ? (
-        <div className="p-4 text-red-400 bg-red-900/50 rounded-md">
+        <div className="p-4 text-red-800 bg-red-100 rounded-md">
             <p className="font-bold">Diagram Error</p>
             <p>{error}</p>
         </div>

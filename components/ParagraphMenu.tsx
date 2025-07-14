@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { EllipsisVerticalIcon } from './icons/EllipsisVerticalIcon';
 
@@ -49,7 +50,7 @@ const ParagraphMenu: React.FC<ParagraphMenuProps> = ({ paragraphText, onElaborat
   const createMenuAction = (label: string, action: () => void) => (
     <button
       onClick={action}
-      className="block w-full text-left px-4 py-2 text-sm text-primary hover:bg-secondary/50"
+      className="block w-full text-left px-4 py-2 text-sm text-primary hover:bg-muted/50"
     >
       {label}
     </button>
@@ -59,17 +60,17 @@ const ParagraphMenu: React.FC<ParagraphMenuProps> = ({ paragraphText, onElaborat
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-1.5 rounded-full bg-surface/80 hover:bg-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
+        className="p-1.5 rounded-full bg-surface/80 hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-accent"
         aria-label="Paragraph actions"
       >
         <EllipsisVerticalIcon className="w-5 h-5 text-primary/80" />
       </button>
       {isOpen && (
-        <div className="absolute right-0 mt-1 w-48 bg-background border border-secondary/50 rounded-md shadow-2xl z-20 py-1">
+        <div className="absolute right-0 mt-1 w-48 bg-background border border-primary/20 rounded-md shadow-2xl z-20 py-1">
           {createMenuAction('Elaborate', () => { onElaborate(paragraphText); setIsOpen(false); })}
           {createMenuAction('Generate Diagram', () => { onGenerateDiagram(paragraphText); setIsOpen(false); })}
           {createMenuAction('Generate Image', () => { onGenerateImage(paragraphText); setIsOpen(false); })}
-          <div className="my-1 border-t border-secondary/50"></div>
+          <div className="my-1 border-t border-primary/20"></div>
           {createMenuAction(copyText, handleCopy)}
         </div>
       )}
