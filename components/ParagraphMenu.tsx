@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useRef, useEffect } from 'react';
 import { EllipsisVerticalIcon } from './icons/EllipsisVerticalIcon';
 
@@ -66,11 +67,11 @@ const ParagraphMenu: React.FC<ParagraphMenuProps> = ({ paragraphText, onElaborat
         <EllipsisVerticalIcon className="w-5 h-5 text-primary/80" />
       </button>
       {isOpen && (
-        <div className="absolute right-0 mt-1 w-48 bg-background border border-primary/20 rounded-md shadow-2xl z-20 py-1">
+        <div className="absolute right-0 mt-1 w-48 bg-surface border border-muted rounded-md shadow-2xl z-20 py-1">
           {createMenuAction('Elaborate', () => { onElaborate(paragraphText); setIsOpen(false); })}
           {createMenuAction('Generate Diagram', () => { onGenerateDiagram(paragraphText); setIsOpen(false); })}
           {createMenuAction('Generate Image', () => { onGenerateImage(paragraphText); setIsOpen(false); })}
-          <div className="my-1 border-t border-primary/20"></div>
+          <div className="my-1 border-t border-muted"></div>
           {createMenuAction(copyText, handleCopy)}
         </div>
       )}

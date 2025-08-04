@@ -135,7 +135,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading || attachedFiles.length >= MAX_FILES}
-          className="self-end flex-shrink-0 flex items-center justify-center w-12 h-12 bg-surface border border-primary/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface/70 transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
+          className="self-end flex-shrink-0 flex items-center justify-center w-12 h-12 bg-surface border border-muted rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-muted/20 transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
           aria-label="Attach file"
         >
           <PaperclipIcon className="w-6 h-6 text-primary" />
@@ -144,14 +144,14 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
             {attachedFiles.length > 0 && (
                 <div className="mb-2 space-y-2">
                     {attachedFiles.map((file) => (
-                        <div key={file.name} className="flex items-center justify-between gap-2 p-2 text-sm text-primary bg-background/50 rounded-md border border-primary/20">
+                        <div key={file.name} className="flex items-center justify-between gap-2 p-2 text-sm text-primary bg-surface rounded-md border border-muted">
                             <div className="flex items-center gap-2 min-w-0">
                                 <PaperclipIcon className="w-4 h-4 text-accent flex-shrink-0" />
                                 <span className="truncate" title={file.name}>{file.name}</span>
                             </div>
                             <button
                                 onClick={() => removeFile(file.name)}
-                                className="text-secondary hover:text-red-400 ml-2 p-1 rounded-full flex-shrink-0"
+                                className="text-secondary hover:text-red-300 ml-2 p-1 rounded-full flex-shrink-0"
                                 aria-label={`Remove ${file.name}`}
                             >
                                 <TrashIcon className="w-4 h-4" />
@@ -168,7 +168,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message or / for commands..."
                 rows={1}
-                className="w-full p-3 pr-4 text-primary bg-background border border-primary/20 rounded-lg resize-none focus:ring-2 focus:ring-accent focus:outline-none custom-scrollbar"
+                className="w-full p-3 pr-4 text-primary bg-surface border border-muted rounded-lg resize-none focus:ring-2 focus:ring-accent focus:outline-none custom-scrollbar placeholder-secondary"
                 style={{ maxHeight: '200px' }}
                 disabled={isLoading}
                 />
@@ -177,11 +177,11 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
         <button
             type="submit"
             disabled={isLoading || (!input.trim() && attachedFiles.length === 0)}
-            className="self-end flex items-center justify-center w-12 h-12 bg-accent rounded-lg disabled:bg-muted disabled:cursor-not-allowed hover:bg-accent-dark transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
+            className="self-end flex items-center justify-center w-12 h-12 bg-accent-dark rounded-lg disabled:bg-muted disabled:cursor-not-allowed hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
             aria-label="Send message"
         >
             {isLoading ? (
-            <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
+            <div className="w-5 h-5 border-2 border-t-transparent border-background rounded-full animate-spin"></div>
             ) : (
             <SendIcon className="w-6 h-6 text-background" />
             )}

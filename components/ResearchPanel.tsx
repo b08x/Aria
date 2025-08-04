@@ -27,7 +27,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
             return (
                 <div className="p-4 space-y-4">
                     {[...Array(5)].map((_, i) => (
-                        <div key={i} className="bg-background/50 p-3 rounded-lg animate-pulse">
+                        <div key={i} className="bg-surface p-3 rounded-lg animate-pulse">
                             <div className="h-4 bg-muted/50 rounded w-3/4 mb-2"></div>
                             <div className="h-3 bg-muted/30 rounded w-full mb-3"></div>
                             <div className="h-3 bg-muted/30 rounded w-5/6"></div>
@@ -39,7 +39,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
         
         if (error) {
             return (
-                <div className="p-4 m-4 text-sm text-red-800 bg-red-100 rounded-md">
+                <div className="p-4 m-4 text-sm text-red-300 bg-red-600/30 rounded-md">
                     <p className="font-bold">Search Failed</p>
                     <p>{error}</p>
                 </div>
@@ -58,7 +58,7 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
                         href={item.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block bg-surface/50 p-4 rounded-lg border border-transparent hover:border-accent/50 hover:bg-background/30 transition-all duration-200 group"
+                        className="block bg-surface p-4 rounded-lg border border-transparent hover:border-accent hover:bg-muted/20 transition-all duration-200 group"
                     >
                         <h4 className="text-md font-semibold text-accent group-hover:underline truncate">{item.title}</h4>
                         <p className="text-xs text-secondary truncate mb-2">{item.link}</p>
@@ -70,8 +70,8 @@ const ResearchPanel: React.FC<ResearchPanelProps> = ({ results, isLoading, error
     };
 
     return (
-        <aside className="w-96 h-screen bg-surface flex flex-col border-l border-primary/20 flex-shrink-0">
-            <header className="p-4 border-b border-primary/20 flex items-center gap-3 flex-shrink-0">
+        <aside className="w-96 h-screen bg-surface flex flex-col border-l border-muted flex-shrink-0">
+            <header className="p-4 border-b border-muted flex items-center gap-3 flex-shrink-0">
                 <MagnifyingGlassIcon className="w-6 h-6 text-accent" />
                 <div className="flex-1 min-w-0">
                    <h2 className="text-lg font-bold text-primary truncate">

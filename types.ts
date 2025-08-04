@@ -37,6 +37,7 @@ export interface Message {
     url: string;
     prompt: string;
   };
+  subtopics?: { text: string; completed: boolean }[];
 }
 
 export interface TTSPlayback {

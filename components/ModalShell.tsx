@@ -28,14 +28,14 @@ const ModalShell: React.FC<ModalShellProps> = ({ isOpen, onClose, title, childre
         role="dialog"
     >
       <div
-        className={`bg-surface rounded-lg shadow-2xl border border-secondary/50 w-full ${sizeClasses[size]} flex flex-col max-h-[90vh]`}
+        className={`bg-surface rounded-lg shadow-2xl border border-muted w-full ${sizeClasses[size]} flex flex-col max-h-[90vh]`}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between p-4 border-b border-secondary/50 flex-shrink-0">
+        <header className="flex items-center justify-between p-4 border-b border-muted flex-shrink-0">
           <h2 className="text-xl font-semibold text-primary">{title}</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-secondary hover:text-primary hover:bg-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
+            className="p-1 rounded-full text-secondary hover:text-primary hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-accent"
             aria-label="Close"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

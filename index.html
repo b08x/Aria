@@ -11,18 +11,18 @@
         theme: {
           extend: {
             colors: {
-              'background': '#F8F7FA',
-              'surface': '#FFFFFF',
-              'primary': '#2A212A',
-              'secondary': '#595159',
-              'muted': '#D1D5DB',
-              'accent': '#B22222',
-              'accent-dark': '#D97925',
-              'syntax-yellow': '#D97925',
-              'syntax-purple': '#B22222',
-              'syntax-cyan': '#595159',
-              'code-bg': 'rgba(0, 0, 0, 0.05)',
-              'code-text': '#2A212A',
+              'background': '#212934',
+              'surface': '#333e48',
+              'primary': '#e5e7eb', // Corresponds to text-gray-200
+              'secondary': '#95aac0',
+              'muted': '#5c6f7e',
+              'accent': '#e2a32d',
+              'accent-dark': '#c36e26',
+              'syntax-yellow': '#e2a32d',
+              'syntax-purple': '#c36e26',
+              'syntax-cyan': '#95aac0',
+              'code-bg': '#212934',
+              'code-text': '#e5e7eb',
             },
             keyframes: {
                 'pulse-sm': {
@@ -49,14 +49,14 @@
         height: 8px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: var(--tw-bg-surface, #FFFFFF);
+        background: var(--tw-color-background, #212934);
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: var(--tw-color-muted, #D1D5DB);
+        background: var(--tw-color-muted, #5c6f7e);
         border-radius: 4px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: var(--tw-color-secondary, #595159);
+        background: var(--tw-color-secondary, #95aac0);
       }
       
       .paragraph-container {
@@ -65,16 +65,16 @@
       
       /* Custom Prose styles for markdown rendering */
       .prose {
-        --tw-prose-body: theme('colors.primary / 90%');
+        --tw-prose-body: theme('colors.primary');
         --tw-prose-headings: theme('colors.accent');
         --tw-prose-links: theme('colors.accent');
-        --tw-prose-bold: theme('colors.accent-dark');
+        --tw-prose-bold: theme('colors.accent');
         --tw-prose-counters: theme('colors.accent');
         --tw-prose-bullets: theme('colors.accent');
-        --tw-prose-hr: theme('colors.primary / 20%');
-        --tw-prose-quotes: theme('colors.primary / 95%');
+        --tw-prose-hr: theme('colors.muted');
+        --tw-prose-quotes: theme('colors.primary');
         --tw-prose-quote-borders: theme('colors.accent');
-        --tw-prose-code: theme('colors.primary');
+        --tw-prose-code: theme('colors.code-text');
         --tw-prose-pre-code: theme('colors.code-text');
         --tw-prose-pre-bg: theme('colors.code-bg');
       }
@@ -110,20 +110,20 @@
         border-bottom: 1px solid theme('colors.accent / 50%');
       }
       .prose a:hover {
-        color: theme('colors.accent-dark');
-        border-bottom-color: theme('colors.accent-dark');
+        color: theme('colors.accent');
+        border-bottom-color: theme('colors.accent');
       }
 
       /* Code blocks */
       .prose pre {
-        border: 1px solid theme('colors.primary / 20%');
+        border: 1px solid theme('colors.muted');
         border-radius: 0.5rem;
         padding: 1rem;
         white-space: pre-wrap;
         word-break: break-all;
       }
       .prose code:not(pre > code) {
-        background-color: theme('colors.primary / 10%');
+        background-color: theme('colors.surface');
         color: var(--tw-prose-code);
         padding: 0.2em 0.4em;
         margin: 0;
@@ -142,7 +142,7 @@
       .prose blockquote {
         border-left-width: 4px;
         border-left-color: var(--tw-prose-quote-borders);
-        background-color: theme('colors.accent / 5%');
+        background-color: theme('colors.surface');
         padding: 0.5rem 1rem;
         margin-left: 0;
         margin-right: 0;
@@ -192,6 +192,7 @@
     "react": "https://esm.sh/react@^19.1.0",
     "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
     "ai": "https://esm.sh/ai@^3.2.33",
+    "@ai-sdk/core": "https://esm.sh/@ai-sdk/core@0.0.24",
     "@ai-sdk/google": "https://esm.sh/@ai-sdk/google@0.0.31",
     "@ai-sdk/openai": "https://esm.sh/@ai-sdk/openai@0.0.18",
     "@ai-sdk/anthropic": "https://esm.sh/@ai-sdk/anthropic@0.0.23",

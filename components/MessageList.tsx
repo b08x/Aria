@@ -1,4 +1,6 @@
 
+
+
 import React, { useEffect, useRef } from 'react';
 import { Message as MessageType } from '../types';
 import Message from './Message';
@@ -13,6 +15,7 @@ interface MessageListProps {
   onElaborate: (text: string) => void;
   onGenerateDiagram: (text: string) => void;
   onGenerateImage: (text: string) => void;
+  onSubtopicClick: (subtopic: string) => void;
   ttsSettings: {
     enabled: boolean;
     onToggleTTS: (message: MessageType) => void;
@@ -20,7 +23,7 @@ interface MessageListProps {
   }
 }
 
-const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, loadingMessage, error, onRetry, onElaborate, onGenerateDiagram, onGenerateImage, ttsSettings }) => {
+const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, loadingMessage, error, onRetry, onElaborate, onGenerateDiagram, onGenerateImage, onSubtopicClick, ttsSettings }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,6 +43,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, loadingM
           onElaborate={onElaborate}
           onGenerateDiagram={onGenerateDiagram}
           onGenerateImage={onGenerateImage}
+          onSubtopicClick={onSubtopicClick}
           ttsSettings={ttsSettings}
         />
       ))}
@@ -47,7 +51,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, loadingM
         <div className="flex justify-center">
             <button
                 onClick={onRetry}
-                className="px-4 py-2 text-sm font-medium text-background bg-accent rounded-md hover:bg-accent-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent focus:ring-offset-surface"
+                className="px-4 py-2 text-sm font-medium text-background bg-accent-dark rounded-md hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent focus:ring-offset-surface"
             >
                 Retry Last Message
             </button>

@@ -1,5 +1,5 @@
 {
-  "name": "ARIA: Adaptive Research & Information Assistant-2024-07-13-1200am",
+  "name": "ARIA: Adaptive Research & Information Assistant",
   "description": "ARIA is an Adaptive Research & Information Assistant. It features a guided onboarding process to personalize the AI's style, dynamic curriculum generation, interactive chat, and content creation tools to provide a structured and adaptive learning experience.",
   "requestFramePermissions": [],
   "prompt": ""

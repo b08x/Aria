@@ -1,3 +1,6 @@
+
+
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import mermaid from 'mermaid';
 import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults, Provider } from './types';
@@ -11,7 +14,6 @@ import LandingPage from './components/LandingPage';
 import ProviderSetupPage from './components/ProviderSetupPage';
 import SFLWizardPage from './components/SFLWizardPage';
 import ResearchPanel from './components/ResearchPanel';
-import { useEnvSettings } from './hooks/useEnvSettings';
 
 type Page = 'landing' | 'setupProvider' | 'setupSFL' | 'main';
 
@@ -44,19 +46,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
 
-  // Initialize settings with environment variables
-  useEnvSettings(setSettings, setApiKeyStatus);
-
   useEffect(() => {
     mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
   }, []);
-
-  // Check if we have valid environment variables and can skip setup
-  const hasValidEnvConfig = useMemo(() => {
-    const hasApiKey = settings.apiKey && settings.apiKey.length > 0;
-    const hasValidProvider = apiKeyStatus[settings.provider] === 'valid';
-    return hasApiKey && hasValidProvider;
-  }, [settings.apiKey, settings.provider, apiKeyStatus]);
 
   const messages = useMemo(() => {
     return checkpoints[currentSessionId || 'home'] || [];
@@ -315,11 +307,14 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-        const introText = await generateLessonIntro(sectionTitle, settings);
+        const { introduction, subtopics, closing_question } = await generateLessonIntro(sectionTitle, settings);
+        const content = `${introduction}\n\n> ${closing_question}`;
+
         const introMessage: Message = {
             id: Date.now().toString(),
             role: Role.ASSISTANT,
-            content: introText,
+            content: content,
+            subtopics: subtopics.map(st => ({ text: st, completed: false })),
         };
         setCheckpoints(prev => ({
             ...prev,
@@ -342,19 +337,32 @@ const App: React.FC = () => {
     }
   },[messages, handleSendMessage]);
 
-  // Handle start from landing page - skip setup if env vars are available
-  const handleStart = useCallback(() => {
-    if (hasValidEnvConfig) {
-      setPage('setupSFL');
-    } else {
-      setPage('setupProvider');
-    }
-  }, [hasValidEnvConfig]);
+  const handleSubtopicClick = useCallback((subtopic: string) => {
+    if (!currentSessionId) return;
+
+    // Mark subtopic as completed
+    setMessages(prevMessages => {
+        return prevMessages.map(msg => {
+            if (msg.subtopics) {
+                return {
+                    ...msg,
+                    subtopics: msg.subtopics.map(st => 
+                        st.text === subtopic ? { ...st, completed: true } : st
+                    )
+                };
+            }
+            return msg;
+        });
+    });
+
+    // Send message to AI
+    handleSendMessage(`Please teach me about: "${subtopic}"`);
+  }, [currentSessionId, setMessages, handleSendMessage]);
   
   const renderPage = () => {
     switch(page) {
       case 'landing':
-        return <LandingPage onStart={handleStart} />;
+        return <LandingPage onStart={() => setPage('setupProvider')} />;
       case 'setupProvider':
         return <ProviderSetupPage 
                 settings={settings} 
@@ -369,7 +377,7 @@ const App: React.FC = () => {
         return <SFLWizardPage 
                     onFinish={handleSFLWizardFinish}
                     settings={settings}
-                    onBack={() => hasValidEnvConfig ? setPage('landing') : setPage('setupProvider')}
+                    onBack={() => setPage('setupProvider')}
                 />;
       case 'main':
         const lessonTitle = curriculum?.sections.find(s => s.id === currentSessionId)?.title || (currentSessionId !== 'home' && curriculum?.relatedTopics.includes(currentSessionId!) ? currentSessionId : null);
@@ -400,6 +408,7 @@ const App: React.FC = () => {
               onElaborate={(text) => handleSendMessage(`Tell me more about: ${text}`)}
               onGenerateDiagram={handleGenerateDiagram}
               onGenerateImage={handleGenerateImage}
+              onSubtopicClick={handleSubtopicClick}
               attachedFiles={attachedFiles}
               setAttachedFiles={setAttachedFiles}
               ttsSettings={{

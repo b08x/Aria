@@ -8,6 +8,8 @@ import { PlayIcon } from './icons/PlayIcon';
 import { StopIcon } from './icons/StopIcon';
 import ParagraphMenu from './ParagraphMenu';
 import { PaperclipIcon } from './icons/PaperclipIcon';
+import { CheckCircleIcon } from './icons/CheckCircleIcon';
+import { ArrowRightCircleIcon } from './icons/ArrowRightCircleIcon';
 
 interface MessageProps {
   message: MessageType;
@@ -16,6 +18,7 @@ interface MessageProps {
   onElaborate: (text: string) => void;
   onGenerateDiagram: (text: string) => void;
   onGenerateImage: (text: string) => void;
+  onSubtopicClick: (subtopic: string) => void;
   ttsSettings: {
     enabled: boolean;
     onToggleTTS: (message: MessageType) => void;
@@ -23,13 +26,13 @@ interface MessageProps {
   }
 }
 
-const Message: React.FC<MessageProps> = ({ message, isLastMessage, isLoading, onElaborate, onGenerateDiagram, onGenerateImage, ttsSettings }) => {
+const Message: React.FC<MessageProps> = ({ message, isLastMessage, isLoading, onElaborate, onGenerateDiagram, onGenerateImage, onSubtopicClick, ttsSettings }) => {
   const isUser = message.role === Role.USER;
   const Icon = isUser ? UserIcon : BotIcon;
   const isPlaying = ttsSettings.currentPlayingId === message.id;
 
   const containerClasses = isUser ? 'justify-end' : 'justify-start';
-  const bubbleClasses = isUser ? 'bg-accent-dark/20' : 'bg-surface';
+  const bubbleClasses = isUser ? 'bg-accent-dark' : 'bg-surface';
   const iconContainerClasses = 'bg-surface';
   const iconClasses = isUser ? 'text-primary' : 'text-accent';
 
@@ -74,11 +77,35 @@ const Message: React.FC<MessageProps> = ({ message, isLastMessage, isLoading, on
       )}
       <div className={`group max-w-3xl w-fit`}>
         <div className={`p-4 rounded-xl ${bubbleClasses}`}>
-          <div className="prose">
+          <div className="prose text-primary">
               <RenderedContent />
           </div>
+
+          {message.subtopics && message.subtopics.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-muted/50">
+              <h3 className="font-semibold text-primary mb-3 prose">What to Expect</h3>
+              <div className="space-y-2">
+                {message.subtopics.map((subtopic, index) => (
+                  <button
+                    key={index}
+                    onClick={() => onSubtopicClick(subtopic.text)}
+                    disabled={subtopic.completed}
+                    className="w-full text-left flex items-center gap-3 p-3 rounded-lg transition-colors border border-muted disabled:cursor-not-allowed group hover:bg-accent/20 hover:border-accent disabled:bg-surface/50 disabled:border-muted"
+                  >
+                    {subtopic.completed ? (
+                      <CheckCircleIcon className="w-6 h-6 text-green-400 flex-shrink-0" />
+                    ) : (
+                      <ArrowRightCircleIcon className="w-6 h-6 text-secondary flex-shrink-0 transition-colors group-hover:text-accent" />
+                    )}
+                    <span className={`flex-1 ${subtopic.completed ? 'text-secondary line-through' : 'text-primary'}`}>{subtopic.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {message.image && (
-            <div className="mt-4 border-t border-primary/20 pt-4">
+            <div className="mt-4 border-t border-muted/50 pt-4">
                 <img 
                     src={message.image.url} 
                     alt={message.image.prompt} 
@@ -90,7 +117,7 @@ const Message: React.FC<MessageProps> = ({ message, isLastMessage, isLoading, on
          {message.files && message.files.length > 0 && (
             <div className="mt-2 space-y-1 max-w-xs">
               {message.files.map((file, index) => (
-                <div key={index} className="p-2 text-sm text-primary bg-surface rounded-md border border-primary/20 flex items-center gap-2">
+                <div key={index} className="p-2 text-sm text-primary bg-surface rounded-md border border-muted flex items-center gap-2">
                   <PaperclipIcon className="w-4 h-4 text-accent flex-shrink-0"/>
                   <span className="truncate" title={file.name}>Attached: {file.name}</span>
                 </div>

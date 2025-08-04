@@ -1,5 +1,5 @@
 {
-  "name": "aria:-adaptive-research-&-information-assistant-2024-07-13-1200am",
+  "name": "aria:-adaptive-research-&-information-assistant",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,6 +12,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "ai": "^3.2.33",
+    "@ai-sdk/core": "0.0.24",
     "@ai-sdk/google": "0.0.31",
     "@ai-sdk/openai": "0.0.18",
     "@ai-sdk/anthropic": "0.0.23",
@@ -23,7 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "typescript": "~5.7.2",
+    "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
 }

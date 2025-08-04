@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useRef } from 'react';
 import { SFLConfig, FileAttachment, Settings } from '../types';
 import { DEFAULT_SFL_CONFIG, AI_PERSONAS, TARGET_AUDIENCES, DESIRED_TONES, OUTPUT_FORMATS } from '../constants';
@@ -110,13 +111,13 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
                     placeholder="Type a topic, or upload files to generate one"
-                    className="w-full p-4 text-xl bg-surface border-2 border-primary/20 rounded-lg focus:outline-none focus:ring-4 focus:ring-accent/50 transition"
+                    className="w-full p-4 text-xl bg-surface border-2 border-muted rounded-lg focus:outline-none focus:ring-4 focus:ring-accent/50 transition placeholder-secondary"
                 />
 
                 <div className="flex items-center gap-4">
-                    <hr className="flex-grow border-primary/20"/>
+                    <hr className="flex-grow border-muted"/>
                     <span className="text-secondary text-sm">OR</span>
-                    <hr className="flex-grow border-primary/20"/>
+                    <hr className="flex-grow border-muted"/>
                 </div>
                 
                 <div className="space-y-3">
@@ -133,7 +134,7 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={files.length >= MAX_FILES}
-                        className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-surface border-2 border-dashed border-primary/20 text-primary font-semibold rounded-lg hover:border-accent hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-surface border-2 border-dashed border-muted text-primary font-semibold rounded-lg hover:border-accent hover:text-accent disabled:opacity-50 disabled:cursor-not-allowed transition"
                     >
                         <PaperclipIcon className="w-5 h-5"/>
                         Upload Documents ({files.length}/{MAX_FILES})
@@ -141,14 +142,14 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
                     {files.length > 0 && (
                         <div className="space-y-2 pt-2">
                             {files.map((file) => (
-                                <div key={file.name} className="flex items-center justify-between gap-2 p-2 text-sm text-primary bg-background/50 rounded-md border border-primary/20">
+                                <div key={file.name} className="flex items-center justify-between gap-2 p-2 text-sm text-primary bg-surface rounded-md border border-muted">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <PaperclipIcon className="w-4 h-4 text-accent flex-shrink-0" />
                                         <span className="truncate" title={file.name}>{file.name}</span>
                                     </div>
                                     <button
                                         onClick={() => removeFile(file.name)}
-                                        className="text-secondary hover:text-red-400 ml-2 p-1 rounded-full flex-shrink-0"
+                                        className="text-secondary hover:text-red-300 ml-2 p-1 rounded-full flex-shrink-0"
                                         aria-label={`Remove ${file.name}`}
                                     >
                                         <TrashIcon className="w-4 h-4" />
@@ -182,15 +183,15 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
     <div className="min-h-screen bg-background text-primary flex flex-col items-center justify-center p-4 transition-all duration-500">
       <div className="max-w-3xl w-full text-center">
         <div className="mb-4 h-16">
-            <h1 className="text-4xl font-bold transition-opacity duration-300">{steps[currentStep].title}</h1>
+            <h1 className="text-4xl font-bold transition-opacity duration-300 text-accent">{steps[currentStep].title}</h1>
             {currentStep > 0 && topic && (
-                <p className="text-accent text-lg">for: {topic}</p>
+                <p className="text-secondary text-lg">for: {topic}</p>
             )}
         </div>
         <p className="text-secondary mb-8">Step {currentStep + 1} of {steps.length}</p>
         
         {error && (
-            <div className="p-3 mb-4 text-sm text-center text-red-800 bg-red-100 rounded-md">
+            <div className="p-3 mb-4 text-sm text-center text-red-300 bg-red-600/30 rounded-md">
                 <p>{error}</p>
             </div>
         )}
@@ -216,14 +217,14 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
                  <button 
                     onClick={handleNext} 
                     disabled={isNextDisabled || isGeneratingTopic}
-                    className="px-6 py-3 bg-accent text-background font-semibold rounded-lg hover:bg-accent-dark disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-6 py-3 bg-accent-dark text-background font-semibold rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Next
                 </button>
             ) : (
                 <button 
                     onClick={handleFinish}
-                    className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600"
+                    className="px-6 py-3 bg-accent-dark text-background font-semibold rounded-lg hover:bg-accent"
                 >
                     Generate & Start Learning
                 </button>
@@ -240,21 +241,21 @@ const OptionSelector: React.FC<{options: readonly string[], selected?: string, o
             <button
                 key={option}
                 onClick={() => onSelect(option)}
-                className={`p-6 rounded-lg border-2 transition-colors ${selected === option ? 'bg-accent/20 border-accent' : 'bg-surface/50 border-primary/20 hover:border-primary/50'}`}
+                className={`p-6 rounded-lg border-2 transition-colors ${selected === option ? 'bg-accent/20 border-accent' : 'bg-surface border-muted hover:border-accent/50'}`}
             >
-                <span className="text-lg font-medium">{option}</span>
+                <span className="text-lg font-medium text-primary">{option}</span>
             </button>
         ))}
     </div>
 );
 
 const ReviewStep: React.FC<{config: SFLConfig, topic: string}> = ({ config, topic }) => (
-    <div className="text-left bg-surface/50 border border-primary/20 p-6 rounded-lg max-w-md mx-auto space-y-3">
-        <p><strong>Topic:</strong> <span className="text-accent">{topic}</span></p>
-        <p><strong>Tutor Persona:</strong> <span className="text-accent">{config.sflTenor.aiPersona}</span></p>
-        <p><strong>For:</strong> <span className="text-accent">{config.sflTenor.targetAudience}</span></p>
-        <p><strong>Tone:</strong> <span className="text-accent">{config.sflTenor.desiredTone}</span></p>
-        <p><strong>Format:</strong> <span className="text-accent">{config.sflMode.outputFormat}</span></p>
+    <div className="text-left bg-surface border border-muted p-6 rounded-lg max-w-md mx-auto space-y-3">
+        <p className="text-primary"><strong>Topic:</strong> <span className="text-accent">{topic}</span></p>
+        <p className="text-primary"><strong>Tutor Persona:</strong> <span className="text-accent">{config.sflTenor.aiPersona}</span></p>
+        <p className="text-primary"><strong>For:</strong> <span className="text-accent">{config.sflTenor.targetAudience}</span></p>
+        <p className="text-primary"><strong>Tone:</strong> <span className="text-accent">{config.sflTenor.desiredTone}</span></p>
+        <p className="text-primary"><strong>Format:</strong> <span className="text-accent">{config.sflMode.outputFormat}</span></p>
     </div>
 );
 
