@@ -11,6 +11,17 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# --- Detect compose command ---
+if command -v podman-compose &> /dev/null; then
+    COMPOSE_CMD="podman-compose"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_CMD="docker-compose"
+else
+    echo -e "${RED}[ERROR]${NC} Neither 'podman-compose' nor 'docker-compose' found. Please install one of them."
+    exit 1
+fi
+# --- End of detection ---
+
 # Function to print colored output
 print_status() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -70,7 +81,7 @@ show_help() {
 start_dev() {
     print_header "Starting ARIA Development Containers"
     check_env_file
-    docker-compose up -d
+    $COMPOSE_CMD up -d
     print_status "Containers started successfully!"
     print_status "Application available at: http://localhost"
     print_status "Health check: http://localhost/health"
@@ -80,7 +91,7 @@ start_dev() {
 start_prod() {
     print_header "Starting ARIA Production Containers"
     check_env_file
-    docker-compose -f docker-compose.prod.yml up -d
+    $COMPOSE_CMD -f docker-compose.prod.yml up -d
     print_status "Production containers started successfully!"
     print_status "Application available at: http://localhost"
 }
@@ -89,7 +100,7 @@ start_prod() {
 start_dev_reload() {
     print_header "Starting ARIA Development with Hot Reload"
     check_env_file
-    docker-compose --profile dev up -d
+    $COMPOSE_CMD --profile dev up -d
     print_status "Development containers with hot reload started!"
     print_status "nginx: http://localhost:80"
     print_status "Vite dev server: http://localhost:5173"
@@ -98,8 +109,8 @@ start_dev_reload() {
 # Stop containers
 stop_containers() {
     print_header "Stopping ARIA Containers"
-    docker-compose down
-    docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+    $COMPOSE_CMD down
+    $COMPOSE_CMD -f docker-compose.prod.yml down 2>/dev/null || true
     print_status "Containers stopped successfully!"
 }
 
@@ -113,26 +124,24 @@ restart_containers() {
 # Show logs
 show_logs() {
     print_header "ARIA Container Logs"
-    docker-compose logs -f --tail=50
+    $COMPOSE_CMD logs -f --tail=50
 }
 
 # Build containers
 build_containers() {
     print_header "Building ARIA Containers"
-    docker-compose build --no-cache
+    $COMPOSE_CMD build --no-cache
     print_status "Containers built successfully!"
 }
 
 # Clean up
 clean_up() {
     print_header "Cleaning Up ARIA Docker Resources"
-    print_warning "This will remove all containers, images, and volumes. Continue? (y/N)"
+    print_warning "This will remove all containers, networks, volumes, and images associated with ARIA. Continue? (y/N)"
     read -r response
     if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        docker-compose down -v --remove-orphans
-        docker-compose -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
-        docker system prune -f
-        docker volume prune -f
+        $COMPOSE_CMD down -v --rmi all --remove-orphans
+        $COMPOSE_CMD -f docker-compose.prod.yml down -v --rmi all --remove-orphans 2>/dev/null || true
         print_status "Cleanup completed!"
     else
         print_status "Cleanup cancelled"
@@ -142,7 +151,7 @@ clean_up() {
 # Show status
 show_status() {
     print_header "ARIA Container Status"
-    docker-compose ps
+    $COMPOSE_CMD ps
     echo ""
     print_header "Docker System Info"
     docker system df
@@ -163,7 +172,7 @@ health_check() {
 # Open shell
 open_shell() {
     print_header "Opening Shell in ARIA Container"
-    container_name=$(docker-compose ps -q aria-app)
+    container_name=$($COMPOSE_CMD ps -q aria-app)
     if [ -z "$container_name" ]; then
         print_error "No running ARIA container found. Start containers first: $0 start"
         exit 1

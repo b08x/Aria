@@ -21,7 +21,7 @@ const App: React.FC = () => {
   // Playground State
   const [settings, setSettings] = useState<Settings>(INITIAL_SETTINGS);
   const [apiKeyStatus, setApiKeyStatus] = useState<Record<string, ApiKeyStatus>>({});
-  const [ttsPlayback, setTtsPlayback] = useState<TTSPlayback>({ isPlaying: false, messageId: null, audio: null });
+  const [ttsPlayback, setTtsPlayback] = useState<TTSPlayback>({ isPlaying: false, isLoading: false, messageId: null, audio: null });
   const [dynamicModels, setDynamicModels] = useState<Record<string, string[]>>({});
 
   // ARIA State
@@ -134,7 +134,7 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     setError(null);
     setIsLoading(true);
     stopTTS(ttsPlayback);
-    setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
+    setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null, audio: null });
     
     const userMessage: Message = { id: Date.now().toString(), role: Role.USER, content: finalPrompt, files: attachedFiles };
     const currentMessages = isRetry ? messages.slice(0, -1) : [...messages, userMessage];
@@ -256,18 +256,41 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
 
     if (ttsPlayback.isPlaying && ttsPlayback.messageId === message.id) {
         stopTTS(ttsPlayback);
-        setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
-    } else {
-        stopTTS(ttsPlayback);
-        try {
-            setError(null);
-            const audio = await playTTS(contentToPlay, settings.elevenLabsVoiceId, settings.elevenLabsApiKey);
-            audio.onended = () => setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
-            setTtsPlayback({ isPlaying: true, messageId: message.id, audio });
-        } catch(e: any) {
-            setError(`TTS Error: ${e.message}`);
-            setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
-        }
+        setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null, audio: null });
+        return;
+    }
+    
+    // UI should prevent this, but as a safeguard.
+    if (ttsPlayback.isLoading) return;
+
+    stopTTS(ttsPlayback);
+    setTtsPlayback({ isPlaying: false, isLoading: true, messageId: message.id, audio: null });
+    
+    try {
+        setError(null);
+        const audio = await playTTS(contentToPlay, settings.elevenLabsVoiceId, settings.elevenLabsApiKey);
+        audio.onended = () => setTtsPlayback(current => {
+            if (current.audio === audio) {
+                return { isPlaying: false, isLoading: false, messageId: null, audio: null };
+            }
+            return current;
+        });
+        setTtsPlayback(current => {
+            if (current.isLoading && current.messageId === message.id) {
+                return { isPlaying: true, isLoading: false, messageId: message.id, audio };
+            }
+            // another request was initiated. this result is stale.
+            stopTTS({ ...current, audio });
+            return current;
+        });
+    } catch(e: any) {
+        setError(`TTS Error: ${e.message}`);
+        setTtsPlayback(current => {
+            if(current.isLoading && current.messageId === message.id) {
+               return { isPlaying: false, isLoading: false, messageId: null, audio: null };
+            }
+            return current;
+        });
     }
   }, [settings, ttsPlayback]);
 
@@ -403,7 +426,8 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
               ttsSettings={{
                   enabled: settings.ttsEnabled,
                   onToggleTTS: handleTTS,
-                  currentPlayingId: ttsPlayback.messageId
+                  currentPlayingId: ttsPlayback.isPlaying ? ttsPlayback.messageId : null,
+                  currentLoadingId: ttsPlayback.isLoading ? ttsPlayback.messageId : null,
               }}
             />
             <ResearchPanel

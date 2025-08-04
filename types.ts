@@ -43,6 +43,7 @@ export interface Message {
 
 export interface TTSPlayback {
   isPlaying: boolean;
+  isLoading: boolean;
   messageId: string | null;
   audio: HTMLAudioElement | null;
 }

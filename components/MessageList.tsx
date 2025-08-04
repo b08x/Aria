@@ -19,6 +19,7 @@ interface MessageListProps {
     enabled: boolean;
     onToggleTTS: (message: MessageType) => void;
     currentPlayingId: string | null;
+    currentLoadingId: string | null;
   }
 }
 

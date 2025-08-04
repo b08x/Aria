@@ -26,13 +26,18 @@ interface MessageProps {
     enabled: boolean;
     onToggleTTS: (message: MessageType) => void;
     currentPlayingId: string | null;
+    currentLoadingId: string | null;
   }
 }
 
 const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGenerateDiagram, onGenerateImage, onSubtopicClick, onContinue, ttsSettings }) => {
   const isUser = message.role === Role.USER;
   const Icon = isUser ? UserIcon : BotIcon;
+  
   const isPlaying = ttsSettings.currentPlayingId === message.id;
+  const isLoadingThisTTS = ttsSettings.currentLoadingId === message.id;
+  const isAnyTTSLoading = ttsSettings.currentLoadingId !== null;
+
 
   const hasGrounding = !isUser && message.groundingMetadata && message.groundingMetadata.length > 0;
 
@@ -186,10 +191,25 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
          {!isUser && ttsSettings.enabled && originalContentForActions && (
               <button
                 onClick={() => ttsSettings.onToggleTTS(message)}
-                className={`mt-2 flex items-center gap-2 text-xs px-2 py-1 rounded-md transition-colors ${isPlaying ? 'bg-accent text-background' : 'bg-muted/50 text-primary hover:bg-muted'}`}
+                disabled={isAnyTTSLoading}
+                className={`mt-2 flex items-center gap-2 text-xs px-2 py-1 rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${isPlaying ? 'bg-accent text-background' : 'bg-muted/50 text-primary hover:bg-muted'}`}
               >
-                {isPlaying ? <StopIcon className="w-4 h-4" /> : <PlayIcon className="w-4 h-4" />}
-                <span>{isPlaying ? 'Stop Audio' : 'Play Audio'}</span>
+                {isLoadingThisTTS ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-t-transparent border-current rounded-full animate-spin"></div>
+                    <span>Generating...</span>
+                  </>
+                ) : isPlaying ? (
+                  <>
+                    <StopIcon className="w-4 h-4" />
+                    <span>Stop Audio</span>
+                  </>
+                ) : (
+                  <>
+                    <PlayIcon className="w-4 h-4" />
+                    <span>Play Audio</span>
+                  </>
+                )}
               </button>
          )}
       </div>
