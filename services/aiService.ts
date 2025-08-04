@@ -474,8 +474,14 @@ ${historySummary}`;
 export async function generateDiagramData(prompt: string, settings: Settings): Promise<{ title: string, code: string }> {
     const text = await generateText(settings, prompt, DIAGRAM_SYSTEM_INSTRUCTION, "application/json");
     try {
-        const data = parseJsonFromText(text);
-        if (typeof data.title === 'string' && typeof data.code === 'string') return data;
+        let data = parseJsonFromText(text);
+        // Sometimes the model wraps the object in an array.
+        if (Array.isArray(data) && data.length > 0) {
+            data = data[0];
+        }
+        if (typeof data.title === 'string' && typeof data.code === 'string') {
+            return data;
+        }
         throw new Error("Invalid JSON structure received from model.");
     } catch (e) {
         console.error("Failed to parse JSON for diagram:", text);
@@ -487,7 +493,11 @@ export async function generateLessonIntro(topic: string, settings: Settings): Pr
     const prompt = `The topic is: "${topic}"`;
     const text = await generateText(settings, prompt, LESSON_INTRO_SYSTEM_INSTRUCTION, "application/json");
     try {
-        const data = parseJsonFromText(text);
+        let data = parseJsonFromText(text);
+        // Sometimes the model wraps the object in an array.
+        if (Array.isArray(data) && data.length > 0) {
+            data = data[0];
+        }
         if (typeof data.introduction === 'string' && Array.isArray(data.subtopics) && typeof data.closing_question === 'string') {
             return data;
         }

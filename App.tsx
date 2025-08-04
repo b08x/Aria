@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import mermaid from 'mermaid';
 import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults, Provider } from './types';
@@ -63,7 +61,9 @@ const App: React.FC = () => {
   }, [currentSessionId]);
 
   const systemPrompt = useMemo(() => {
-    let basePrompt = "You are ARIA, the Adaptive Research & Information Assistant. Your responses must be grounded using Google Search to provide accurate, up-to-date information.";
+    let basePrompt = `You are ARIA, the Adaptive Research & Information Assistant. Your responses must be grounded using Google Search to provide accurate, up-to-date information.
+Your primary directive is to provide concise, focused answers. Your responses should be limited to a maximum of two paragraphs, with each paragraph containing 3-4 sentences.
+After providing your initial response, ALWAYS CONCLUDE with a clear, specific, and relevant question to encourage the user to continue the conversation or delve deeper. For example, instead of a generic "What's next?", ask "Would you like me to explain the role of chlorophyll in this process?". Do not add a "Continue" button or any similar UI elements in your text.`;
 
     if (initialContextFiles.length > 0) {
         const fileContext = initialContextFiles.map(file =>
@@ -73,7 +73,6 @@ const App: React.FC = () => {
     }
 
     basePrompt += "\n\nFor individual messages, the user may attach additional files. Their content will be provided below the user's prompt, marked by '--- START OF FILE: [filename] ---' and '--- END OF FILE: [filename] ---'. Analyze these files and incorporate them into your response for that specific message.";
-    basePrompt += "\n\nWhen asked to elaborate, first ask a clarifying question to better tailor the information. Wrap this clarifying question in a markdown blockquote (e.g., '> What specifically would you like to know?'). DO NOT provide the full elaboration immediately.";
 
     if (sflConfig) {
         if (sflConfig.sflTenor.aiPersona) basePrompt += `\n- Your persona: ${sflConfig.sflTenor.aiPersona}.`;
@@ -148,62 +147,47 @@ const App: React.FC = () => {
 
     try {
         const result = await streamText(settings, systemPrompt, currentMessages);
-        let buffer = '';
+        let fullResponseText = '';
 
         for await (const delta of result.textStream) {
-            buffer += delta;
-            const parts = buffer.split(/\n\n+/);
-
-            if (parts.length > 1) {
-                const completeParagraph = parts.slice(0, -1).join('\n\n');
-                const remainder = parts.slice(-1)[0];
-
-                if (completeParagraph.trim()) {
-                    setMessages(prev => prev.map(msg =>
-                        msg.id === currentMessageId ? { ...msg, content: completeParagraph } : msg
-                    ));
-
-                    currentMessageId = `${Date.now()}-${Math.random()}`;
-                    setMessages(prev => [...prev, { id: currentMessageId, role: Role.ASSISTANT, content: remainder }]);
-                    buffer = remainder;
-                }
-            } else {
-                setMessages(prev => prev.map(msg =>
-                    msg.id === currentMessageId ? { ...msg, content: buffer } : msg
-                ));
-            }
+            fullResponseText += delta;
         }
-        
-        setMessages(prev => prev.filter(m => m.content.trim() !== '' || m.role === 'user'));
 
+        setMessages(prev => prev.map(msg =>
+            msg.id === currentMessageId
+                ? { ...msg, content: fullResponseText.trim() }
+                : msg
+        ));
+        
         const finalResponse = result.getFinalResponse();
         const groundingMetadata = finalResponse?.candidates?.[0]?.groundingMetadata;
 
         if (groundingMetadata && groundingMetadata.groundingChunks && groundingMetadata.groundingChunks.length > 0) {
             setMessages(prev => {
-                const lastAssistantMsgIndex = prev.map(m => m.role).lastIndexOf(Role.ASSISTANT);
-                 if (lastAssistantMsgIndex !== -1) {
-                    const newMessages = [...prev];
-                    const targetMessage = newMessages[lastAssistantMsgIndex];
-                    newMessages[lastAssistantMsgIndex] = {
-                        ...targetMessage,
-                        content: targetMessage.content.trim(), // Ensure no trailing spaces before adding metadata
-                        groundingMetadata: groundingMetadata.groundingChunks as any[],
-                    };
-                    return newMessages;
-                }
-                return prev;
+                return prev.map(msg => {
+                    if (msg.id === currentMessageId) {
+                        return {
+                            ...msg,
+                            groundingMetadata: groundingMetadata.groundingChunks as any[],
+                        };
+                    }
+                    return msg;
+                });
             });
         }
     } catch (e: any) {
         console.error(e);
         const errorMessage = e.message || 'An unknown error occurred.';
         setError(`API Error: ${errorMessage}`);
-        setMessages(prev => prev.filter(msg => msg.id !== currentMessageId && msg.role !== Role.ASSISTANT));
+        setMessages(prev => prev.filter(msg => msg.id !== currentMessageId));
     } finally {
         setIsLoading(false);
     }
   }, [messages, settings, systemPrompt, ttsPlayback, attachedFiles, setMessages, initialContextFiles]);
+
+  const handleContinue = useCallback(() => {
+    handleSendMessage('Continue');
+  }, [handleSendMessage]);
 
   const handleGenerateDiagram = useCallback(async (text: string) => {
       setIsLoading(true);
@@ -265,7 +249,11 @@ const App: React.FC = () => {
 
 
   const handleTTS = useCallback(async (message: Message) => {
-    if (!settings.ttsEnabled || !settings.elevenLabsApiKey || !message.content) return;
+    if (!settings.ttsEnabled || !settings.elevenLabsApiKey) return;
+    
+    const contentToPlay = message.content;
+    if (!contentToPlay) return;
+
     if (ttsPlayback.isPlaying && ttsPlayback.messageId === message.id) {
         stopTTS(ttsPlayback);
         setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
@@ -273,7 +261,7 @@ const App: React.FC = () => {
         stopTTS(ttsPlayback);
         try {
             setError(null);
-            const audio = await playTTS(message.content, settings.elevenLabsVoiceId, settings.elevenLabsApiKey);
+            const audio = await playTTS(contentToPlay, settings.elevenLabsVoiceId, settings.elevenLabsApiKey);
             audio.onended = () => setTtsPlayback({ isPlaying: false, messageId: null, audio: null });
             setTtsPlayback({ isPlaying: true, messageId: message.id, audio });
         } catch(e: any) {
@@ -409,6 +397,7 @@ const App: React.FC = () => {
               onGenerateDiagram={handleGenerateDiagram}
               onGenerateImage={handleGenerateImage}
               onSubtopicClick={handleSubtopicClick}
+              onContinue={handleContinue}
               attachedFiles={attachedFiles}
               setAttachedFiles={setAttachedFiles}
               ttsSettings={{

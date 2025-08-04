@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Message as MessageType, FileAttachment } from '../types';
 import ChatInput from './ChatInput';
@@ -16,6 +17,7 @@ interface ChatPanelProps {
   onGenerateDiagram: (text: string) => void;
   onGenerateImage: (text: string) => void;
   onSubtopicClick: (subtopic: string) => void;
+  onContinue: () => void;
   attachedFiles: FileAttachment[];
   setAttachedFiles: (files: FileAttachment[]) => void;
   ttsSettings: {
@@ -37,6 +39,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     onGenerateDiagram,
     onGenerateImage,
     onSubtopicClick,
+    onContinue,
     attachedFiles,
     setAttachedFiles,
     ttsSettings,
@@ -51,7 +54,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       </header>
 
       <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
-         {messages.length > 0 || isLoading ? (
+         {messages.length > 0 || isLoading || loadingMessage ? (
             <MessageList 
                 messages={messages} 
                 isLoading={isLoading} 
@@ -62,6 +65,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 onGenerateDiagram={onGenerateDiagram}
                 onGenerateImage={onGenerateImage}
                 onSubtopicClick={onSubtopicClick}
+                onContinue={onContinue}
                 ttsSettings={ttsSettings}
             />
         ) : (

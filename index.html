@@ -18,8 +18,10 @@
               'muted': '#5c6f7e',
               'accent': '#e2a32d',
               'accent-dark': '#c36e26',
-              'syntax-yellow': '#e2a32d',
-              'syntax-purple': '#c36e26',
+              'white': '#ffffff',
+              'link-blue': '#60a5fa',
+              'syntax-magenta': '#d53f8c',
+              'syntax-green': '#68d391',
               'syntax-cyan': '#95aac0',
               'code-bg': '#212934',
               'code-text': '#e5e7eb',
@@ -67,20 +69,20 @@
       .prose {
         --tw-prose-body: theme('colors.primary');
         --tw-prose-headings: theme('colors.accent');
-        --tw-prose-links: theme('colors.accent');
-        --tw-prose-bold: theme('colors.accent');
-        --tw-prose-counters: theme('colors.accent');
-        --tw-prose-bullets: theme('colors.accent');
+        --tw-prose-links: theme('colors.link-blue');
+        --tw-prose-bold: theme('colors.white');
+        --tw-prose-counters: theme('colors.syntax-magenta');
+        --tw-prose-bullets: theme('colors.syntax-cyan');
         --tw-prose-hr: theme('colors.muted');
         --tw-prose-quotes: theme('colors.primary');
-        --tw-prose-quote-borders: theme('colors.accent');
-        --tw-prose-code: theme('colors.code-text');
+        --tw-prose-quote-borders: theme('colors.syntax-magenta');
+        --tw-prose-code: theme('colors.syntax-green');
         --tw-prose-pre-code: theme('colors.code-text');
         --tw-prose-pre-bg: theme('colors.code-bg');
       }
 
       /* General Prose adjustments */
-      .prose p, .prose ul, .prose ol {
+      .prose p, .prose ul, .prose ol, .prose li {
         line-height: 1.7;
       }
 
@@ -101,17 +103,25 @@
       /* Bold */
       .prose strong {
         color: var(--tw-prose-bold);
+        font-weight: 600;
       }
 
-      /* Links */
+      /* Links and Citations */
       .prose a {
+        color: var(--tw-prose-links);
         text-decoration: none;
         transition: color 0.2s, text-decoration 0.2s;
-        border-bottom: 1px solid theme('colors.accent / 50%');
+        border-bottom: 1px solid theme('colors.link-blue / 50%');
       }
       .prose a:hover {
-        color: theme('colors.accent');
-        border-bottom-color: theme('colors.accent');
+        color: theme('colors.link-blue');
+        border-bottom-color: theme('colors.link-blue');
+      }
+      .prose sup a {
+        border-bottom: none;
+        font-size: 0.75em;
+        vertical-align: super;
+        margin: 0 0.1em;
       }
 
       /* Code blocks */
@@ -192,13 +202,13 @@
     "react": "https://esm.sh/react@^19.1.0",
     "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
     "ai": "https://esm.sh/ai@^3.2.33",
-    "@ai-sdk/core": "https://esm.sh/@ai-sdk/core@0.0.24",
     "@ai-sdk/google": "https://esm.sh/@ai-sdk/google@0.0.31",
     "@ai-sdk/openai": "https://esm.sh/@ai-sdk/openai@0.0.18",
     "@ai-sdk/anthropic": "https://esm.sh/@ai-sdk/anthropic@0.0.23",
     "@ai-sdk/mistral": "https://esm.sh/@ai-sdk/mistral@0.0.20",
     "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
     "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1",
+    "rehype-raw": "https://esm.sh/rehype-raw@^7.0.0",
     "@google/genai": "https://esm.sh/@google/genai@^1.8.0",
     "mermaid": "https://esm.sh/mermaid@^11.8.0"
   }
