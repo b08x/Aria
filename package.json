@@ -1,5 +1,5 @@
 {
-  "name": "aria:-adaptive-research-&-information-assistant-2024-07-13-1200am",
+  "name": "aria",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -18,12 +18,13 @@
     "@ai-sdk/mistral": "0.0.20",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "rehype-raw": "^7.0.0",
     "@google/genai": "^1.8.0",
     "mermaid": "^11.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
-    "typescript": "~5.7.2",
+    "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
 }

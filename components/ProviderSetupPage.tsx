@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo, useCallback } from 'react';
 import { Settings, Provider, ApiKeyStatus } from '../types';
 import { PROVIDERS, MODEL_GUIDE } from '../constants';
@@ -70,7 +71,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
     }
   };
 
-  const commonInputClasses = "w-full px-3 py-2 bg-background border border-primary/20 text-primary rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transition-colors placeholder-secondary";
+  const commonInputClasses = "w-full px-3 py-2 bg-surface border border-muted text-primary rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transition-colors placeholder-secondary";
   const modelInfo = MODEL_GUIDE[settings.model] || { name: settings.model, description: 'No guide available for this model.', strengths: '' };
   
   const modelList = dynamicModels[settings.provider] || PROVIDERS[settings.provider].models;
@@ -80,7 +81,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
     if(isVerifying) return <span className="text-xs text-yellow-400 animate-pulse">Validating...</span>;
     switch(apiKeyStatus[settings.provider]) {
         case 'valid': return <span className="text-xs text-green-400">Verified</span>;
-        case 'invalid': return <span className="text-xs text-red-400">Invalid Key</span>;
+        case 'invalid': return <span className="text-xs text-red-300">Invalid Key</span>;
         case 'ratelimited': return <span className="text-xs text-orange-400">Service Unavailable</span>;
         default: return <span className="text-xs text-secondary">Unverified</span>;
     }
@@ -90,8 +91,8 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
     <div className="min-h-screen bg-background text-primary flex items-center justify-center p-4">
       <div className="max-w-4xl w-full mx-auto grid md:grid-cols-2 gap-12 items-start">
         {/* Left Side: Configuration */}
-        <div className="bg-surface p-8 rounded-lg border border-primary/20">
-            <h1 className="text-3xl font-bold text-primary mb-2">Configure Your AI Assistant</h1>
+        <div className="bg-surface p-8 rounded-lg border border-muted">
+            <h1 className="text-3xl font-bold text-accent mb-2">Configure Your AI Assistant</h1>
             <p className="text-secondary mb-8">Select your AI provider and provide a valid API key to continue.</p>
 
             <div className="space-y-6">
@@ -103,7 +104,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
                         <button
                             key={key}
                             onClick={() => handleSettingsChange('provider', key)}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors border ${settings.provider === key ? 'bg-accent text-background border-accent' : 'bg-background/50 border-primary/20 hover:bg-muted/50'}`}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors border ${settings.provider === key ? 'bg-accent text-background border-accent' : 'bg-background/50 border-muted hover:bg-muted/50'}`}
                         >{name}</button>
                     ))}
                     </div>
@@ -127,7 +128,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
                             type="button"
                             onClick={handleValidate}
                             disabled={!settings.apiKey.trim() || isVerifying || apiKeyStatus[settings.provider] === 'valid'}
-                            className="px-4 py-2 text-sm font-semibold text-background bg-accent rounded-md transition-colors hover:bg-accent-dark focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-muted disabled:cursor-not-allowed flex-shrink-0"
+                            className="px-4 py-2 text-sm font-semibold text-background bg-accent-dark rounded-md transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-muted disabled:cursor-not-allowed flex-shrink-0"
                         >
                             {apiKeyStatus[settings.provider] === 'valid' 
                                 ? 'Validated' 
@@ -139,7 +140,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
                 </div>
                 
                 {/* Model and Parameters */}
-                <fieldset className="border border-primary/20 p-4 rounded-md space-y-4" disabled={isNextDisabled}>
+                <fieldset className="border border-muted p-4 rounded-md space-y-4" disabled={isNextDisabled}>
                     <legend className="text-sm font-semibold text-accent px-1">Model Parameters</legend>
                     <div>
                         <label htmlFor="model-select" className="block text-sm font-medium text-primary/80 mb-1">Model</label>
@@ -165,15 +166,15 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
             <button
                 onClick={onComplete}
                 disabled={isNextDisabled}
-                className="w-full mt-8 px-4 py-3 bg-accent text-background text-lg font-semibold rounded-lg hover:bg-accent-dark transition-colors focus:outline-none focus:ring-4 focus:ring-accent/50 disabled:bg-muted disabled:cursor-not-allowed"
+                className="w-full mt-8 px-4 py-3 bg-accent-dark text-background text-lg font-semibold rounded-lg hover:bg-accent transition-colors focus:outline-none focus:ring-4 focus:ring-accent/50 disabled:bg-muted disabled:cursor-not-allowed"
             >
                 Next
             </button>
         </div>
         
         {/* Right Side: Model Guide */}
-        <div className="bg-surface/50 p-8 rounded-lg border border-primary/20 sticky top-10">
-            <h2 className="text-2xl font-bold text-primary mb-3">{modelInfo.name}</h2>
+        <div className="bg-surface p-8 rounded-lg border border-muted sticky top-10">
+            <h2 className="text-2xl font-bold text-accent mb-3">{modelInfo.name}</h2>
             <p className="text-primary/80 mb-4">{modelInfo.description}</p>
             <div className="bg-accent/10 border-l-4 border-accent p-4 rounded-r-lg">
                 <p className="font-semibold text-accent">{modelInfo.strengths}</p>

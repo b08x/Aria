@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Message as MessageType, FileAttachment } from '../types';
 import ChatInput from './ChatInput';
@@ -15,6 +16,8 @@ interface ChatPanelProps {
   onElaborate: (text: string) => void;
   onGenerateDiagram: (text: string) => void;
   onGenerateImage: (text: string) => void;
+  onSubtopicClick: (subtopic: string) => void;
+  onContinue: () => void;
   attachedFiles: FileAttachment[];
   setAttachedFiles: (files: FileAttachment[]) => void;
   ttsSettings: {
@@ -35,13 +38,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     onElaborate,
     onGenerateDiagram,
     onGenerateImage,
+    onSubtopicClick,
+    onContinue,
     attachedFiles,
     setAttachedFiles,
     ttsSettings,
 }) => {
   return (
     <main className="flex flex-1 flex-col h-screen">
-      <header className="flex items-center p-4 border-b border-primary/20 shadow-md bg-surface/80 backdrop-blur-sm sticky top-0 z-10">
+      <header className="flex items-center p-4 border-b border-muted shadow-md bg-surface/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center">
           <BotIcon className="w-8 h-8 mr-3 text-accent" />
           <h1 className="text-2xl font-bold text-primary">ARIA</h1>
@@ -49,7 +54,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       </header>
 
       <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
-         {messages.length > 0 || isLoading ? (
+         {messages.length > 0 || isLoading || loadingMessage ? (
             <MessageList 
                 messages={messages} 
                 isLoading={isLoading} 
@@ -59,6 +64,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 onElaborate={onElaborate}
                 onGenerateDiagram={onGenerateDiagram}
                 onGenerateImage={onGenerateImage}
+                onSubtopicClick={onSubtopicClick}
+                onContinue={onContinue}
                 ttsSettings={ttsSettings}
             />
         ) : (
@@ -73,12 +80,12 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         )}
       </div>
 
-      <footer className="p-4 border-t border-primary/20 bg-background">
+      <footer className="p-4 border-t border-muted bg-background">
         {error && (
-            <div className="p-3 mb-3 text-sm text-center text-red-800 bg-red-100 rounded-md">
+            <div className="p-3 mb-3 text-sm text-center text-red-300 bg-red-600/30 rounded-md">
                 <p>
                     <strong>Error:</strong> {error}
-                    <button onClick={() => setError(null)} className="ml-4 font-bold text-red-700 hover:text-red-900">Close</button>
+                    <button onClick={() => setError(null)} className="ml-4 font-bold text-red-200 hover:text-red-100">Close</button>
                 </p>
             </div>
         )}

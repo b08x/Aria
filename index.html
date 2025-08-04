@@ -11,18 +11,20 @@
         theme: {
           extend: {
             colors: {
-              'background': '#F8F7FA',
-              'surface': '#FFFFFF',
-              'primary': '#2A212A',
-              'secondary': '#595159',
-              'muted': '#D1D5DB',
-              'accent': '#B22222',
-              'accent-dark': '#D97925',
-              'syntax-yellow': '#D97925',
-              'syntax-purple': '#B22222',
-              'syntax-cyan': '#595159',
-              'code-bg': 'rgba(0, 0, 0, 0.05)',
-              'code-text': '#2A212A',
+              'background': '#212934',
+              'surface': '#333e48',
+              'primary': '#e5e7eb', // Corresponds to text-gray-200
+              'secondary': '#95aac0',
+              'muted': '#5c6f7e',
+              'accent': '#e2a32d',
+              'accent-dark': '#c36e26',
+              'white': '#ffffff',
+              'link-blue': '#60a5fa',
+              'syntax-magenta': '#d53f8c',
+              'syntax-green': '#68d391',
+              'syntax-cyan': '#95aac0',
+              'code-bg': '#212934',
+              'code-text': '#e5e7eb',
             },
             keyframes: {
                 'pulse-sm': {
@@ -49,14 +51,14 @@
         height: 8px;
       }
       .custom-scrollbar::-webkit-scrollbar-track {
-        background: var(--tw-bg-surface, #FFFFFF);
+        background: var(--tw-color-background, #212934);
       }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: var(--tw-color-muted, #D1D5DB);
+        background: var(--tw-color-muted, #5c6f7e);
         border-radius: 4px;
       }
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: var(--tw-color-secondary, #595159);
+        background: var(--tw-color-secondary, #95aac0);
       }
       
       .paragraph-container {
@@ -65,22 +67,22 @@
       
       /* Custom Prose styles for markdown rendering */
       .prose {
-        --tw-prose-body: theme('colors.primary / 90%');
+        --tw-prose-body: theme('colors.primary');
         --tw-prose-headings: theme('colors.accent');
-        --tw-prose-links: theme('colors.accent');
-        --tw-prose-bold: theme('colors.accent-dark');
-        --tw-prose-counters: theme('colors.accent');
-        --tw-prose-bullets: theme('colors.accent');
-        --tw-prose-hr: theme('colors.primary / 20%');
-        --tw-prose-quotes: theme('colors.primary / 95%');
-        --tw-prose-quote-borders: theme('colors.accent');
-        --tw-prose-code: theme('colors.primary');
+        --tw-prose-links: theme('colors.link-blue');
+        --tw-prose-bold: theme('colors.white');
+        --tw-prose-counters: theme('colors.syntax-magenta');
+        --tw-prose-bullets: theme('colors.syntax-cyan');
+        --tw-prose-hr: theme('colors.muted');
+        --tw-prose-quotes: theme('colors.primary');
+        --tw-prose-quote-borders: theme('colors.syntax-magenta');
+        --tw-prose-code: theme('colors.syntax-green');
         --tw-prose-pre-code: theme('colors.code-text');
         --tw-prose-pre-bg: theme('colors.code-bg');
       }
 
       /* General Prose adjustments */
-      .prose p, .prose ul, .prose ol {
+      .prose p, .prose ul, .prose ol, .prose li {
         line-height: 1.7;
       }
 
@@ -101,29 +103,37 @@
       /* Bold */
       .prose strong {
         color: var(--tw-prose-bold);
+        font-weight: 600;
       }
 
-      /* Links */
+      /* Links and Citations */
       .prose a {
+        color: var(--tw-prose-links);
         text-decoration: none;
         transition: color 0.2s, text-decoration 0.2s;
-        border-bottom: 1px solid theme('colors.accent / 50%');
+        border-bottom: 1px solid theme('colors.link-blue / 50%');
       }
       .prose a:hover {
-        color: theme('colors.accent-dark');
-        border-bottom-color: theme('colors.accent-dark');
+        color: theme('colors.link-blue');
+        border-bottom-color: theme('colors.link-blue');
+      }
+      .prose sup a {
+        border-bottom: none;
+        font-size: 0.75em;
+        vertical-align: super;
+        margin: 0 0.1em;
       }
 
       /* Code blocks */
       .prose pre {
-        border: 1px solid theme('colors.primary / 20%');
+        border: 1px solid theme('colors.muted');
         border-radius: 0.5rem;
         padding: 1rem;
         white-space: pre-wrap;
         word-break: break-all;
       }
       .prose code:not(pre > code) {
-        background-color: theme('colors.primary / 10%');
+        background-color: theme('colors.surface');
         color: var(--tw-prose-code);
         padding: 0.2em 0.4em;
         margin: 0;
@@ -142,7 +152,7 @@
       .prose blockquote {
         border-left-width: 4px;
         border-left-color: var(--tw-prose-quote-borders);
-        background-color: theme('colors.accent / 5%');
+        background-color: theme('colors.surface');
         padding: 0.5rem 1rem;
         margin-left: 0;
         margin-right: 0;
@@ -198,6 +208,7 @@
     "@ai-sdk/mistral": "https://esm.sh/@ai-sdk/mistral@0.0.20",
     "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
     "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1",
+    "rehype-raw": "https://esm.sh/rehype-raw@^7.0.0",
     "@google/genai": "https://esm.sh/@google/genai@^1.8.0",
     "mermaid": "https://esm.sh/mermaid@^11.8.0"
   }

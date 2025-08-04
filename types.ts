@@ -1,3 +1,4 @@
+
 import { PROVIDERS } from "./constants";
 
 export type Provider = keyof typeof PROVIDERS;
@@ -37,6 +38,7 @@ export interface Message {
     url: string;
     prompt: string;
   };
+  subtopics?: { text: string; completed: boolean }[];
 }
 
 export interface TTSPlayback {

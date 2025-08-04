@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { AcademicCapIcon } from './icons/AcademicCapIcon';
 
@@ -8,7 +9,7 @@ interface LandingPageProps {
 }
 
 const FeatureCard: React.FC<{ icon: React.ReactNode, title: string, children: React.ReactNode }> = ({ icon, title, children }) => (
-    <div className="bg-surface/50 p-6 rounded-lg border border-primary/20">
+    <div className="bg-surface p-6 rounded-lg border border-muted">
         <div className="flex items-center gap-4 mb-3">
             <div className="bg-accent/20 p-2 rounded-full">
                 {icon}
@@ -30,7 +31,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                     <AcademicCapIcon className="w-16 h-16 text-accent" />
                     <h1 className="text-6xl font-bold tracking-tighter">ARIA</h1>
                 </div>
-                <p className="text-2xl text-primary/80 font-light">Adaptive Research & Information Assistant</p>
+                <p className="text-2xl text-secondary font-light">Adaptive Research & Information Assistant</p>
             </div>
             <p className="text-xl text-primary/70 max-w-3xl mx-auto">
                 ARIA is an interactive AI assistant designed for structured learning. It personalizes your experience, generates dynamic curricula, and helps you synthesize information effectively.
@@ -54,7 +55,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
         <button 
             onClick={onStart} 
-            className="px-8 py-4 bg-accent text-background text-lg font-semibold rounded-lg hover:bg-accent-dark transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-accent/50"
+            className="px-8 py-4 bg-accent-dark text-background text-lg font-semibold rounded-lg hover:bg-accent transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-accent/50"
         >
             Get Started
         </button>

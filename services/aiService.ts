@@ -1,6 +1,3 @@
-
-
-
 import { GoogleGenAI, GenerateContentResponse, Content, Part } from "@google/genai";
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -60,9 +57,16 @@ export const validateApiKey = async (settings: Settings): Promise<ApiKeyStatus> 
     if (!settings.apiKey) return 'unverified';
 
     try {
-        // Always use Vercel AI SDK to avoid CORS issues
-        const model = getLanguageModel(settings);
-        await vercelGenerateText({ model, prompt: 'validate', maxTokens: 1 });
+        if (settings.provider === 'google') {
+            const ai = getGoogleGenAIClient(settings.apiKey);
+            await ai.models.generateContent({
+                model: settings.model,
+                contents: [{ role: 'user', parts: [{ text: 'validate' }] }],
+            });
+        } else {
+            const model = getLanguageModel(settings);
+            await vercelGenerateText({ model, prompt: 'validate' });
+        }
         return 'valid';
     } catch (e: any) {
         console.error(`API Key validation failed for ${settings.provider}:`, e);
@@ -198,12 +202,43 @@ export const streamText = (
     system: string,
     messages: Message[],
 ) => {
-    // Always use Vercel AI SDK to avoid CORS issues with direct API calls
+    if (settings.provider === 'google') {
+        return streamTextGoogle(settings, system, messages);
+    }
     return streamTextVercel(settings, system, messages);
 };
 
 
 // --- Non-Streaming Generation ---
+
+const generateTextGoogle = async (
+    settings: Settings,
+    prompt: string,
+    systemInstruction?: string,
+    responseMimeType?: "text/plain" | "application/json"
+): Promise<string> => {
+    const { apiKey, model: modelName, temperature, topP } = settings;
+    const ai = getGoogleGenAIClient(apiKey);
+    
+    const config: any = {
+        temperature,
+        topP,
+    };
+    if (systemInstruction) {
+        config.systemInstruction = systemInstruction;
+    }
+    if (responseMimeType) {
+        config.responseMimeType = responseMimeType;
+    }
+
+    const response = await ai.models.generateContent({
+        model: modelName,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config,
+    });
+
+    return response.text;
+};
 
 const generateText = async (
     settings: Settings,
@@ -211,6 +246,10 @@ const generateText = async (
     systemInstruction?: string,
     responseMimeType?: "text/plain" | "application/json"
 ): Promise<string> => {
+    if (settings.provider === 'google') {
+        return generateTextGoogle(settings, prompt, systemInstruction, responseMimeType);
+    }
+
     const model = getLanguageModel(settings);
     const result = await vercelGenerateText({
         model,
@@ -247,9 +286,20 @@ export const fetchAvailableModels = async (settings: Settings): Promise<string[]
         let fetchedModels: string[] = [];
         switch (provider) {
             case 'google': {
-                const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`Google API request failed with status ${response.status}`);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models`;
+                const response = await fetch(url, {
+                    headers: { 'x-goog-api-key': apiKey }
+                });
+                if (!response.ok) {
+                    let message = `Google API request failed with status ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData?.error?.message) {
+                            message = errorData.error.message;
+                        }
+                    } catch (e) { /* ignore json parse error */ }
+                    throw new Error(message);
+                }
                 const data = await response.json();
                 fetchedModels = data.models
                     ?.filter((m: any) => m.supportedGenerationMethods?.includes('generateContent') && !m.name.includes('embedding'))
@@ -315,12 +365,29 @@ Example Response:
   "code": "graph TD\\n    A[\\"User Enters Credentials\\"] --> B{\\"Check Database\\"}\\n    B -->|\\"Valid\\"| C[\\"Access Granted\\"]\\n    B -->|\\"Invalid\\"| D[\\"Show Error Message<br>Try again\\"]"
 }`;
 
-const LESSON_INTRO_SYSTEM_INSTRUCTION = `You are an AI Assistant kicking off a new lesson. Your response must be structured as follows:
-1. Start with a brief, engaging one-paragraph introduction to the topic.
-2. Follow with a section titled "### What to Expect".
-3. Under this heading, provide a Markdown bulleted list of 2-4 key concepts or skills the user will learn.
-4. Conclude by asking a question to prompt the user for input before you begin teaching. **IMPORTANT**: You MUST wrap this final question in a markdown blockquote (e.g., "> Does this sound good?").
-Do not provide any other content.`;
+export interface LessonIntroData {
+    introduction: string;
+    subtopics: string[];
+    closing_question: string;
+}
+
+const LESSON_INTRO_SYSTEM_INSTRUCTION = `You are an AI Assistant kicking off a new lesson. Your response must be a single, valid JSON object.
+The JSON object must have three keys:
+1. "introduction": A string containing a brief, engaging one-paragraph introduction to the topic.
+2. "subtopics": An array of strings, where each string is a key concept or skill the user will learn (2-4 items).
+3. "closing_question": A string for a concluding question to prompt the user for input.
+
+Do not include any other text, explanations, or markdown formatting outside of the single JSON object.
+Example Response:
+{
+  "introduction": "Welcome to our lesson on Chunking! We'll explore how this fundamental concept from cognitive psychology can be applied to text processing to make sense of large amounts of information.",
+  "subtopics": [
+    "Understanding Chunking in Cognitive Psychology",
+    "Applying Chunking to Text Processing",
+    "Practical Examples of Chunking"
+  ],
+  "closing_question": "Does this sound like a good plan to start with?"
+}`;
 
 const parseSectionsFromMarkdown = (content: string): Section[] => {
     const sections: Section[] = [];
@@ -407,8 +474,14 @@ ${historySummary}`;
 export async function generateDiagramData(prompt: string, settings: Settings): Promise<{ title: string, code: string }> {
     const text = await generateText(settings, prompt, DIAGRAM_SYSTEM_INSTRUCTION, "application/json");
     try {
-        const data = parseJsonFromText(text);
-        if (typeof data.title === 'string' && typeof data.code === 'string') return data;
+        let data = parseJsonFromText(text);
+        // Sometimes the model wraps the object in an array.
+        if (Array.isArray(data) && data.length > 0) {
+            data = data[0];
+        }
+        if (typeof data.title === 'string' && typeof data.code === 'string') {
+            return data;
+        }
         throw new Error("Invalid JSON structure received from model.");
     } catch (e) {
         console.error("Failed to parse JSON for diagram:", text);
@@ -416,9 +489,31 @@ export async function generateDiagramData(prompt: string, settings: Settings): P
     }
 }
 
-export async function generateLessonIntro(topic: string, settings: Settings): Promise<string> {
+export async function generateLessonIntro(topic: string, settings: Settings): Promise<LessonIntroData> {
     const prompt = `The topic is: "${topic}"`;
-    return await generateText(settings, prompt, LESSON_INTRO_SYSTEM_INSTRUCTION);
+    const text = await generateText(settings, prompt, LESSON_INTRO_SYSTEM_INSTRUCTION, "application/json");
+    try {
+        let data = parseJsonFromText(text);
+        // Sometimes the model wraps the object in an array.
+        if (Array.isArray(data) && data.length > 0) {
+            data = data[0];
+        }
+        if (typeof data.introduction === 'string' && Array.isArray(data.subtopics) && typeof data.closing_question === 'string') {
+            return data;
+        }
+         if (typeof data.introduction === 'string' && Array.isArray(data.subtopics)) { // Handle case where closing_question is missing
+            return { ...data, closing_question: "Ready to dive in?" };
+        }
+        throw new Error("Invalid JSON structure for lesson intro.");
+    } catch (e) {
+        console.error("Failed to parse JSON for lesson intro:", text, e);
+        // Fallback for models that fail to produce valid JSON
+        return {
+            introduction: text,
+            subtopics: [],
+            closing_question: "Shall we begin?"
+        };
+    }
 }
 
 export async function generateImage(prompt: string, settings: Settings): Promise<string> {
