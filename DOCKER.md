@@ -17,6 +17,7 @@ nano .env
 ### 2. **Choose Your Deployment Mode**
 
 #### Production Mode (Recommended)
+
 ```bash
 # Build and start the production container
 docker-compose -f docker-compose.prod.yml up -d
@@ -29,6 +30,7 @@ docker-compose -f docker-compose.prod.yml down
 ```
 
 #### Development Mode
+
 ```bash
 # Build and start the development container
 docker-compose up -d
@@ -41,6 +43,7 @@ docker-compose down
 ```
 
 #### Development with Hot Reload
+
 ```bash
 # Start with development profile (includes hot reload)
 docker-compose --profile dev up -d
@@ -53,6 +56,7 @@ docker-compose --profile dev up -d
 ## 📋 Available Commands
 
 ### Docker Compose Commands
+
 ```bash
 # Start services
 docker-compose up -d
@@ -80,6 +84,7 @@ docker-compose down -v --remove-orphans
 ```
 
 ### Docker Commands
+
 ```bash
 # Build the image manually
 docker build -t aria-app .
@@ -127,17 +132,20 @@ To customize nginx configuration:
 ## 🌐 Access Points
 
 ### Default Ports
-- **Main Application**: http://localhost:80
-- **Development Server**: http://localhost:5173 (dev profile only)
-- **Prometheus** (monitoring profile): http://localhost:9090
+
+- **Main Application**: <http://localhost:80>
+- **Development Server**: <http://localhost:5173> (dev profile only)
+- **Prometheus** (monitoring profile): <http://localhost:9090>
 
 ### Health Checks
-- **Health endpoint**: http://localhost/health
+
+- **Health endpoint**: <http://localhost/health>
 - **Container health**: `docker ps` (shows health status)
 
 ## 🔐 Production Considerations
 
 ### SSL/HTTPS Setup
+
 ```bash
 # Enable SSL with Let's Encrypt
 docker-compose -f docker-compose.prod.yml --profile ssl up -d
@@ -148,6 +156,7 @@ docker-compose -f docker-compose.prod.yml --profile ssl up -d
 ```
 
 ### Security Features
+
 - Read-only root filesystem
 - Non-privileged nginx user
 - Security headers configured
@@ -155,7 +164,9 @@ docker-compose -f docker-compose.prod.yml --profile ssl up -d
 - Minimal attack surface
 
 ### Resource Limits
+
 Production compose includes:
+
 - Memory limit: 512MB
 - CPU limit: 0.5 cores
 - Memory reservation: 256MB
@@ -164,11 +175,13 @@ Production compose includes:
 ## 📊 Monitoring
 
 ### Built-in Health Checks
+
 - Container health status via Docker
 - nginx health endpoint at `/health`
 - Application startup validation
 
 ### Optional Prometheus Integration
+
 ```bash
 # Start with monitoring
 docker-compose -f docker-compose.prod.yml --profile monitoring up -d
@@ -181,6 +194,7 @@ docker-compose -f docker-compose.prod.yml --profile monitoring up -d
 ### Common Issues
 
 #### Container won't start
+
 ```bash
 # Check logs
 docker-compose logs aria-app
@@ -193,6 +207,7 @@ docker-compose config
 ```
 
 #### API keys not working
+
 ```bash
 # Verify environment variables are loaded
 docker exec aria-app env | grep API_KEY
@@ -202,6 +217,7 @@ docker exec aria-app cat /usr/share/nginx/html/env-config.js
 ```
 
 #### nginx configuration errors
+
 ```bash
 # Test nginx config
 docker exec aria-app nginx -t
@@ -211,6 +227,7 @@ docker exec aria-app nginx -s reload
 ```
 
 #### Network issues
+
 ```bash
 # Check if ports are available
 netstat -tulpn | grep :80
@@ -221,6 +238,7 @@ docker network inspect aria_aria-network
 ```
 
 ### Debugging Commands
+
 ```bash
 # Enter container shell
 docker exec -it aria-app sh
@@ -238,6 +256,7 @@ docker exec aria-app printenv
 ## 🔄 Updates and Maintenance
 
 ### Updating the Application
+
 ```bash
 # Pull latest changes
 git pull
@@ -250,6 +269,7 @@ docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
 ### Backup and Restore
+
 ```bash
 # Backup configuration
 tar -czf aria-backup.tar.gz .env docker-compose*.yml nginx/

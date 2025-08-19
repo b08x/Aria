@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useMemo, useCallback } from 'react';
 import { Settings, Provider, ApiKeyStatus } from '../types';
 import { PROVIDERS, MODEL_GUIDE } from '../constants';
@@ -89,8 +87,8 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
 
   return (
     <div className="min-h-screen bg-background text-primary flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full mx-auto grid md:grid-cols-2 gap-12 items-start">
-        {/* Left Side: Configuration */}
+      <div className="max-w-3xl w-full mx-auto">
+        {/* Single Column Configuration Panel */}
         <div className="bg-surface p-8 rounded-lg border border-muted">
             <h1 className="text-3xl font-bold text-accent mb-2">Configure Your AI Assistant</h1>
             <p className="text-secondary mb-8">Select your AI provider and provide a valid API key to continue.</p>
@@ -152,6 +150,16 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
                             )}
                         </select>
                     </div>
+                    
+                    {/* Integrated Model Guide */}
+                    <div className="bg-background/50 p-4 rounded-lg border border-muted">
+                        <h3 className="text-xl font-bold text-accent mb-2">{modelInfo.name}</h3>
+                        <p className="text-primary/80 text-sm mb-3">{modelInfo.description}</p>
+                        <div className="bg-accent/10 border-l-4 border-accent p-3 rounded-r-lg text-sm">
+                            <p className="font-semibold text-accent">{modelInfo.strengths}</p>
+                        </div>
+                    </div>
+
                      <div>
                         <label htmlFor="temperature" className="block text-sm font-medium text-primary/80 mb-1">Temperature: <span className="font-mono text-accent">{settings.temperature.toFixed(1)}</span></label>
                         <input id="temperature" type="range" min="0" max="1" step="0.1" value={settings.temperature} onChange={e => handleSettingsChange('temperature', parseFloat(e.target.value))} className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer" />
@@ -170,15 +178,6 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
             >
                 Next
             </button>
-        </div>
-        
-        {/* Right Side: Model Guide */}
-        <div className="bg-surface p-8 rounded-lg border border-muted sticky top-10">
-            <h2 className="text-2xl font-bold text-accent mb-3">{modelInfo.name}</h2>
-            <p className="text-primary/80 mb-4">{modelInfo.description}</p>
-            <div className="bg-accent/10 border-l-4 border-accent p-4 rounded-r-lg">
-                <p className="font-semibold text-accent">{modelInfo.strengths}</p>
-            </div>
         </div>
       </div>
     </div>
