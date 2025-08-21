@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Settings, Provider, ApiKeyStatus } from '../types';
 import { PROVIDERS, MODEL_GUIDE } from '../constants';
 import { validateApiKey, fetchAvailableModels } from '../services/aiService';
@@ -14,6 +14,15 @@ interface ProviderSetupPageProps {
   setDynamicModels: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
 }
 
+// Using a map for env vars for easier access and to keep logic clean.
+const ENV_API_KEYS: Record<Provider, string | undefined> = {
+    google: (window as any).process?.env?.GOOGLE_API_KEY,
+    openai: (window as any).process?.env?.OPENAI_API_KEY,
+    anthropic: (window as any).process?.env?.ANTHROPIC_API_KEY,
+    mistral: (window as any).process?.env?.MISTRAL_API_KEY,
+    openrouter: (window as any).process?.env?.OPENROUTER_API_KEY,
+};
+
 const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({ 
     settings, 
     setSettings, 
@@ -25,6 +34,50 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
 }) => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [isKeyFromEnv, setIsKeyFromEnv] = useState(false);
+
+  // This effect will run when the component mounts and when the provider changes.
+  useEffect(() => {
+    const apiKeyFromEnv = ENV_API_KEYS[settings.provider];
+
+    const validateAndFetch = async (newSettings: Settings) => {
+        setIsVerifying(true);
+        const status = await validateApiKey(newSettings);
+        setApiKeyStatus(prev => ({ ...prev, [newSettings.provider]: status }));
+        setIsVerifying(false);
+
+        if (status === 'valid') {
+            setIsFetchingModels(true);
+            try {
+                const models = await fetchAvailableModels(newSettings);
+                setDynamicModels(prev => ({ ...prev, [newSettings.provider]: models }));
+                setSettings(s => {
+                    // Update model only if current one is not in the new list
+                    if (s.provider === newSettings.provider && !models.includes(s.model)) {
+                        return { ...s, model: models[0] || '' };
+                    }
+                    return s;
+                });
+            } catch(e) {
+                console.error("Failed to fetch models after env key validation", e);
+            } finally {
+                setIsFetchingModels(false);
+            }
+        }
+    };
+
+    if (apiKeyFromEnv) {
+        setIsKeyFromEnv(true);
+        // Create a temporary settings object to avoid stale state issues in async validation.
+        const newSettings = { ...settings, apiKey: apiKeyFromEnv };
+        setSettings(newSettings);
+        validateAndFetch(newSettings);
+    } else {
+        setIsKeyFromEnv(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.provider]);
+
 
   const isNextDisabled = useMemo(() => {
     return isVerifying || isFetchingModels || apiKeyStatus[settings.provider] !== 'valid';
@@ -37,9 +90,12 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
         const newProvider = value as Provider;
         const availableModels = dynamicModels[newProvider] || PROVIDERS[newProvider].models;
         newState.model = availableModels[0] || '';
-        newState.apiKey = ''; // Clear API key on provider switch
+        // Clear API key on provider switch. The useEffect will repopulate it if an env var exists.
+        newState.apiKey = ''; 
         setApiKeyStatus(prevStatus => ({ ...prevStatus, [newProvider]: 'unverified' }));
       } else if (field === 'apiKey') {
+         // If user types, it's no longer an env key and it needs re-validation.
+        setIsKeyFromEnv(false);
         setApiKeyStatus(prevStatus => ({ ...prevStatus, [prevSettings.provider]: 'unverified' }));
       }
       return newState;
@@ -47,7 +103,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
   }, [setSettings, setApiKeyStatus, dynamicModels]);
   
   const handleValidate = async () => {
-    if (!settings.apiKey) return;
+    if (!settings.apiKey || isKeyFromEnv) return;
     setIsVerifying(true);
     const status = await validateApiKey(settings);
     setApiKeyStatus(prev => ({...prev, [settings.provider]: status }));
@@ -69,7 +125,7 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
     }
   };
 
-  const commonInputClasses = "w-full px-3 py-2 bg-surface border border-muted text-primary rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transition-colors placeholder-secondary";
+  const commonInputClasses = "w-full px-3 py-2 bg-surface border border-muted text-primary rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-accent transition-colors placeholder-secondary disabled:bg-muted/30";
   const modelInfo = MODEL_GUIDE[settings.model] || { name: settings.model, description: 'No guide available for this model.', strengths: '' };
   
   const modelList = dynamicModels[settings.provider] || PROVIDERS[settings.provider].models;
@@ -119,13 +175,14 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
                             type="password" 
                             value={settings.apiKey} 
                             onChange={e => handleSettingsChange('apiKey', e.target.value)} 
-                            placeholder={`Enter your ${PROVIDERS[settings.provider].name} API key`} 
+                            placeholder={isKeyFromEnv ? 'API Key set from environment' : `Enter your ${PROVIDERS[settings.provider].name} API key`}
                             className={`${commonInputClasses} flex-1`}
+                            disabled={isKeyFromEnv}
                         />
                         <button
                             type="button"
                             onClick={handleValidate}
-                            disabled={!settings.apiKey.trim() || isVerifying || apiKeyStatus[settings.provider] === 'valid'}
+                            disabled={!settings.apiKey.trim() || isVerifying || apiKeyStatus[settings.provider] === 'valid' || isKeyFromEnv}
                             className="px-4 py-2 text-sm font-semibold text-background bg-accent-dark rounded-md transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-muted disabled:cursor-not-allowed flex-shrink-0"
                         >
                             {apiKeyStatus[settings.provider] === 'valid' 
@@ -135,6 +192,11 @@ const ProviderSetupPage: React.FC<ProviderSetupPageProps> = ({
                                     : 'Validate'}
                         </button>
                     </div>
+                     {isKeyFromEnv && (
+                        <p className="text-xs text-secondary mt-1 pl-1">
+                            This API key has been automatically loaded from an environment variable.
+                        </p>
+                    )}
                 </div>
                 
                 {/* Model and Parameters */}
