@@ -1,8 +1,10 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Message as MessageType, Role } from '../types';
 import { UserIcon } from './icons/UserIcon';
 import { BotIcon } from './icons/BotIcon';
@@ -38,15 +40,44 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
   const isLoadingThisTTS = ttsSettings.currentLoadingId === message.id;
   const isAnyTTSLoading = ttsSettings.currentLoadingId !== null;
 
+  const [displayedContent, setDisplayedContent] = useState(message.content);
+  const contentRef = useRef(message.content);
+  contentRef.current = message.content;
+
+  useEffect(() => {
+    if (isLoading) {
+      setDisplayedContent('');
+
+      const intervalId = setInterval(() => {
+        setDisplayedContent(current => {
+          const target = contentRef.current;
+          if (current.length < target.length) {
+            const charsToAdd = Math.min(5, target.length - current.length);
+            return target.substring(0, current.length + charsToAdd);
+          }
+          return current;
+        });
+      }, 40);
+
+      return () => {
+        clearInterval(intervalId);
+        setDisplayedContent(contentRef.current);
+      };
+    } else {
+      setDisplayedContent(message.content);
+    }
+  }, [isLoading]);
+
 
   const hasGrounding = !isUser && message.groundingMetadata && message.groundingMetadata.length > 0;
 
   const processedContent = useMemo(() => {
+    const contentToProcess = displayedContent;
     if (!hasGrounding) {
-      return message.content;
+      return contentToProcess;
     }
     let citationIndex = 0;
-    return message.content.replace(/\[i\]/g, () => {
+    return contentToProcess.replace(/\[i\]/g, () => {
       citationIndex++;
       const source = message.groundingMetadata?.[citationIndex - 1];
       if (source?.web?.uri) {
@@ -54,47 +85,15 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
       }
       return `<sup>[${citationIndex}]</sup>`; // Fallback if source is malformed
     });
-  }, [message.content, message.groundingMetadata, hasGrounding]);
+  }, [displayedContent, message.groundingMetadata, hasGrounding]);
   
-  const contentToShow = hasGrounding ? processedContent : message.content;
+  const contentToShow = hasGrounding ? processedContent : displayedContent;
   const originalContentForActions = message.content;
 
   const containerClasses = isUser ? 'justify-end' : 'justify-start';
   const bubbleClasses = isUser ? 'bg-accent-dark' : 'bg-surface';
   const iconContainerClasses = 'bg-surface';
   const iconClasses = isUser ? 'text-primary' : 'text-accent';
-
-  const RenderedContent = () => {
-    if (contentToShow) {
-        if (isUser) {
-            return <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentToShow}</ReactMarkdown>;
-        }
-        // For assistant, render with paragraph menu.
-        return (
-            <div className="group relative">
-                <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-                    <ParagraphMenu
-                    paragraphText={originalContentForActions}
-                    onElaborate={onElaborate}
-                    onGenerateDiagram={onGenerateDiagram}
-                    onGenerateImage={onGenerateImage}
-                    />
-                </div>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{contentToShow}</ReactMarkdown>
-            </div>
-        );
-    }
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center gap-1.5">
-                <span className="w-2 h-2 bg-accent rounded-full animate-pulse" style={{animationDelay: '0s'}}></span>
-                <span className="w-2 h-2 bg-accent rounded-full animate-pulse" style={{animationDelay: '0.15s'}}></span>
-                <span className="w-2 h-2 bg-accent rounded-full animate-pulse" style={{animationDelay: '0.3s'}}></span>
-            </div>
-        );
-    }
-    return null;
-  };
   
   return (
     <div className={`flex items-start gap-3 ${containerClasses} paragraph-container`}>
@@ -106,10 +105,56 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
       <div className={`group max-w-3xl w-fit`}>
         <div className={`p-4 rounded-xl ${bubbleClasses}`}>
           <div className="prose text-primary min-h-[1em]">
-              <RenderedContent />
+            {contentToShow ? (
+                isUser ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{contentToShow}</ReactMarkdown>
+                ) : (
+                    <div className="group relative">
+                        <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                            <ParagraphMenu
+                                paragraphText={originalContentForActions}
+                                onElaborate={onElaborate}
+                                onGenerateDiagram={onGenerateDiagram}
+                                onGenerateImage={onGenerateImage}
+                            />
+                        </div>
+                        <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[rehypeRaw]}
+                            components={{
+                                pre: ({node, ...props}) => <>{props.children}</>,
+                                code({node, className, children, ...props}) {
+                                    const match = /language-(\w+)/.exec(className || '');
+                                    return match ? (
+                                        <SyntaxHighlighter
+                                            style={tomorrow}
+                                            language={match[1]}
+                                            PreTag="pre"
+                                            {...props}
+                                        >
+                                            {String(children).replace(/\n$/, '')}
+                                        </SyntaxHighlighter>
+                                    ) : (
+                                        <code className={className} {...props}>
+                                            {children}
+                                        </code>
+                                    );
+                                }
+                            }}
+                        >{contentToShow}</ReactMarkdown>
+                    </div>
+                )
+            ) : isLoading ? (
+                <div className="flex items-center justify-center gap-1.5">
+                    <span className="w-2 h-2 bg-accent rounded-full animate-pulse" style={{animationDelay: '0s'}}></span>
+                    <span className="w-2 h-2 bg-accent rounded-full animate-pulse" style={{animationDelay: '0.15s'}}></span>
+                    <span className="w-2 h-2 bg-accent rounded-full animate-pulse" style={{animationDelay: '0.3s'}}></span>
+                </div>
+            ) : null}
+            {isLoading && !isUser && <span className="text-accent animate-pulse">▋</span>}
           </div>
 
-          {hasGrounding && (
+          {hasGrounding && !isLoading && (
             <div className="mt-4 pt-3 border-t border-muted/50">
               <h4 className="flex items-center gap-2 font-semibold text-sm text-secondary mb-2">
                 <GlobeAltIcon className="w-4 h-4" />
@@ -133,7 +178,7 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
             </div>
           )}
 
-          {message.subtopics && message.subtopics.length > 0 && (
+          {message.subtopics && message.subtopics.length > 0 && !isLoading && (
             <div className="mt-4 pt-4 border-t border-muted/50">
               <h3 className="font-semibold text-primary mb-3 prose">What to Expect</h3>
               <div className="space-y-2">
@@ -188,7 +233,7 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
             </div>
         )}
 
-         {!isUser && ttsSettings.enabled && originalContentForActions && (
+         {!isUser && ttsSettings.enabled && originalContentForActions && !isLoading && (
               <button
                 onClick={() => ttsSettings.onToggleTTS(message)}
                 disabled={isAnyTTSLoading}

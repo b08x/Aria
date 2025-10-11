@@ -63,6 +63,16 @@ export const validateApiKey = async (settings: Settings): Promise<ApiKeyStatus> 
                 model: settings.model,
                 contents: [{ role: 'user', parts: [{ text: 'validate' }] }],
             });
+        } else if (settings.provider === 'mistral') {
+            const url = 'https://api.mistral.ai/v1/models';
+            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${settings.apiKey}` } });
+            if (!response.ok) {
+                const errorBody = await response.json().catch(() => ({}));
+                const message = errorBody?.message || `Mistral API request failed with status ${response.status}`;
+                const error: any = new Error(message);
+                error.status = response.status;
+                throw error;
+            }
         } else {
             const model = getLanguageModel(settings);
             await vercelGenerateText({ model, prompt: 'validate' });
@@ -158,21 +168,12 @@ const streamTextGoogle = async (
 ): Promise<{ textStream: AsyncGenerator<string>; getFinalResponse: () => GenerateContentResponse | undefined }> => {
     const { apiKey, model: modelName, temperature, topP } = settings;
     const ai = getGoogleGenAIClient(apiKey);
-
-    const history = buildGoogleHistory(messages.slice(0, -1));
-    const latestUserMessage = messages[messages.length - 1];
     
-    let combinedText = latestUserMessage.content;
-    if (latestUserMessage.files && latestUserMessage.files.length > 0) {
-        const fileContents = latestUserMessage.files.map(file =>
-            `\n\n--- START OF FILE: ${file.name} ---\n${file.content}\n--- END OF FILE: ${file.name} ---`
-        ).join('');
-        combinedText += fileContents;
+    const contents = buildGoogleHistory(messages);
+
+    if (contents.length > 0 && contents[contents.length - 1].role !== 'user') {
+        throw new Error("Conversation history must end with a user message.");
     }
-
-    const userParts: Part[] = [{ text: combinedText }];
-    
-    const contents: Content[] = [...history, { role: 'user', parts: userParts }];
 
     let finalResponse: GenerateContentResponse | undefined;
 
@@ -430,23 +431,6 @@ export async function generateCurriculum(topic: string, files: FileAttachment[],
     return sections;
 }
 
-export async function generateRelatedTopics(topic: string, files: FileAttachment[], settings: Settings): Promise<string[]> {
-    let prompt = `Given the main topic "${topic}", list 5 to 7 seemingly disparate but tangentially related concepts or historical events that would provide a richer, interdisciplinary context.`;
-    
-    if (files.length > 0) {
-        const fileContent = files.map(f => `--- START OF FILE: ${f.name} ---\n${f.content}\n--- END OF FILE: ${f.name} ---`).join('\n\n');
-        prompt += `\n\nUse the following source material for context:\n${fileContent}`;
-    }
-    
-    prompt += "\n\nRespond with only a JSON array of strings.";
-    
-    const text = await generateText(settings, prompt, undefined, "application/json");
-    try {
-        const topics = parseJsonFromText(text);
-        return Array.isArray(topics) && topics.every(t => typeof t === 'string') ? topics : [];
-    } catch { return []; }
-}
-
 export async function generateTopicFromFiles(files: FileAttachment[], settings: Settings): Promise<string> {
     const systemInstruction = "Based on the content of the following documents, suggest a concise and descriptive topic title (5-10 words) for a learning curriculum. Respond with only the title text, nothing else. Do not include quotes or any other formatting.";
 
@@ -527,7 +511,7 @@ export async function generateImage(prompt: string, settings: Settings): Promise
     
     try {
         const response = await ai.models.generateImages({
-            model: 'imagen-3.0-generate-002',
+            model: 'imagen-4.0-generate-001',
             prompt: prompt,
             config: { numberOfImages: 1, outputMimeType: 'image/png' },
         });

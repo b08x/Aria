@@ -1,11 +1,55 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { SendIcon } from './icons/SendIcon';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import { Command, commands } from '../commands';
 import AutoCompletePopup from './AutoCompletePopup';
 import { FileAttachment } from '../types';
-import { readFileAsText } from '../utils';
+import { processFile } from '../utils';
 import { TrashIcon } from './icons/TrashIcon';
+import { MicrophoneIcon } from './icons/MicrophoneIcon';
+
+// Fix: Add types for Web Speech API, which are not standard in TypeScript.
+declare global {
+  interface Window {
+    SpeechRecognition: { new (): SpeechRecognition };
+    webkitSpeechRecognition: { new (): SpeechRecognition };
+  }
+}
+
+interface SpeechRecognition {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onend: () => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  start: () => void;
+  stop: () => void;
+}
+
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent {
+  error: string;
+}
+
+interface SpeechRecognitionResultList {
+  [index: number]: SpeechRecognitionResult;
+  length: number;
+}
+
+interface SpeechRecognitionResult {
+  [index: number]: SpeechRecognitionAlternative;
+  length: number;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+}
+
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -20,9 +64,45 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
   const [filteredCommands, setFilteredCommands] = useState<Command[]>(commands);
   const [selectedIndex, setSelectedIndex] = useState(0);
   
+  // New state for voice input
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechRecognitionSupported, setIsSpeechRecognitionSupported] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const MAX_FILES = 3;
+
+  // Effect for speech recognition setup
+  useEffect(() => {
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognitionAPI) {
+      setIsSpeechRecognitionSupported(true);
+      const recognition: SpeechRecognition = new SpeechRecognitionAPI();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const transcript = Array.from(event.results)
+          .map(result => result[0])
+          .map(result => result.transcript)
+          .join('');
+        setInput(transcript);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []); // Run only once
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -57,6 +137,9 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if ((input.trim() || attachedFiles.length > 0) && !isLoading) {
+      if (isListening) {
+        recognitionRef.current?.stop();
+      }
       onSendMessage(input);
       setInput('');
       // Files are cleared in App.tsx after sending
@@ -91,17 +174,18 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
       const files = e.target.files;
       if (files) {
         const remainingSlots = MAX_FILES - attachedFiles.length;
-        const filesToProcess = Array.from(files).slice(0, remainingSlots);
+        // Fix: Cast Array.from(files) to File[] as TypeScript was incorrectly inferring it as unknown[].
+        const filesToProcess: File[] = (Array.from(files) as File[]).slice(0, remainingSlots);
 
         const newAttachments: FileAttachment[] = [...attachedFiles];
 
         for (const file of filesToProcess) {
-            const content = await readFileAsText(file);
-            newAttachments.push({
-                name: file.name,
-                type: file.type,
-                content: content,
-            });
+            try {
+                const attachment = await processFile(file);
+                newAttachments.push(attachment);
+            } catch (error: any) {
+                console.error(`Error processing file ${file.name}:`, error.message);
+            }
         }
         setAttachedFiles(newAttachments);
       }
@@ -112,6 +196,17 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
     setAttachedFiles(attachedFiles.filter(f => f.name !== fileName));
   };
 
+  const handleToggleListening = () => {
+    if (!recognitionRef.current) return;
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      setInput(''); // Clear input before starting
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
 
   return (
     <div className="relative">
@@ -128,7 +223,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
           ref={fileInputRef} 
           onChange={handleFileChange} 
           className="hidden" 
-          accept=".md,.txt,.csv"
+          accept=".md,.txt,.csv,.pdf,.docx"
           multiple
         />
         <button
@@ -166,7 +261,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message or / for commands..."
+                placeholder={isListening ? "Listening..." : "Type a message or / for commands..."}
                 rows={1}
                 className="w-full p-3 pr-4 text-primary bg-surface border border-muted rounded-lg resize-none focus:ring-2 focus:ring-accent focus:outline-none custom-scrollbar placeholder-secondary"
                 style={{ maxHeight: '200px' }}
@@ -174,6 +269,20 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, attache
                 />
             </div>
         </div>
+        <button
+          type="button"
+          onClick={handleToggleListening}
+          disabled={isLoading || !isSpeechRecognitionSupported}
+          className={`self-end flex-shrink-0 flex items-center justify-center w-12 h-12 border rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-accent ${
+            isListening
+              ? 'bg-red-600/30 border-red-500 animate-pulse-sm'
+              : 'bg-surface border-muted hover:bg-muted/20'
+          }`}
+          aria-label={isListening ? 'Stop listening' : 'Start voice input'}
+          title={isSpeechRecognitionSupported ? (isListening ? 'Stop listening' : 'Start voice input') : 'Voice input not supported'}
+        >
+          <MicrophoneIcon className={`w-6 h-6 ${isListening ? 'text-red-300' : 'text-primary'}`} />
+        </button>
         <button
             type="submit"
             disabled={isLoading || (!input.trim() && attachedFiles.length === 0)}

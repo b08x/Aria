@@ -1,13 +1,13 @@
-
-
-
-import React, { useState } from 'react';
-import { Curriculum, SavedDiagram, Settings, Provider, ApiKeyStatus } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Curriculum, SavedDiagram, Settings, Provider, ApiKeyStatus, Task } from '../types';
 import { TrashIcon } from './icons/TrashIcon';
-import { PROVIDERS, ELEVENLABS_VOICES } from '../constants';
+import { PROVIDERS } from '../constants';
 import { AcademicCapIcon } from './icons/AcademicCapIcon';
 import { BeakerIcon } from './icons/BeakerIcon';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { QuestionMarkCircleIcon } from './icons/QuestionMarkCircleIcon';
+import { PlusIcon } from './icons/PlusIcon';
+import TaskItem from './TaskItem';
 
 interface SidebarProps {
   settings: Settings;
@@ -21,9 +21,37 @@ interface SidebarProps {
   onDeleteDiagram: (diagramId: string) => void;
   onTakeQuiz: (moduleId: string) => void;
   dynamicModels: Record<string, string[]>;
+  onShowTutorial: () => void;
+  tasks: Task[];
+  onAddTask: (text: string) => void;
+  onToggleTask: (id: string) => void;
+  onDeleteTask: (id: string) => void;
+  onEditTask: (id: string, newText: string) => void;
+  sessionNotes: Record<string, string>;
+  setSessionNotes: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
-type ActiveTab = 'lessons' | 'diagrams' | 'settings';
+type ActiveTab = 'lessons' | 'diagrams' | 'tasks' | 'settings';
+
+type TabButtonProps = {
+  tab: ActiveTab;
+  label: string;
+  activeTab: ActiveTab;
+  onClick: (tab: ActiveTab) => void;
+};
+
+const TabButton: React.FC<TabButtonProps> = ({ tab, label, activeTab, onClick }) => (
+    <button
+      onClick={() => onClick(tab)}
+      className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+        activeTab === tab
+          ? 'text-accent border-accent'
+          : 'text-secondary border-transparent hover:text-primary hover:border-muted'
+      }`}
+    >
+      {label}
+    </button>
+);
 
 const Sidebar: React.FC<SidebarProps> = ({
   settings,
@@ -37,8 +65,17 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeleteDiagram,
   onTakeQuiz,
   dynamicModels,
+  onShowTutorial,
+  tasks,
+  onAddTask,
+  onToggleTask,
+  onDeleteTask,
+  onEditTask,
+  sessionNotes,
+  setSessionNotes,
 }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('lessons');
+  const incompleteTasksCount = useMemo(() => tasks.filter(t => !t.completed).length, [tasks]);
   
   const handleSettingsChange = (field: keyof Settings, value: any) => {
     setSettings(prev => {
@@ -131,22 +168,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-primary transition-transform ${settings.ttsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
             </div>
-            {settings.ttsEnabled && (
-                <>
-                 <div>
-                    <label className="block text-sm font-medium text-primary/80 mb-1">ElevenLabs API Key</label>
-                    <input type="password" value={settings.elevenLabsApiKey} onChange={e => handleSettingsChange('elevenLabsApiKey', e.target.value)} placeholder="Enter ElevenLabs key" className={commonInputClasses} />
-                 </div>
-                 <div>
-                    <label htmlFor="voice-select" className="block text-sm font-medium text-primary/80 mb-1">Voice</label>
-                    <select id="voice-select" value={settings.elevenLabsVoiceId} onChange={e => handleSettingsChange('elevenLabsVoiceId', e.target.value)} className={commonInputClasses}>
-                        {ELEVENLABS_VOICES.map(voice => (
-                            <option key={voice.id} value={voice.id}>{voice.name}</option>
-                        ))}
-                    </select>
-                </div>
-                </>
-            )}
         </fieldset>
     </div>
   );
@@ -192,32 +213,33 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </ul>
             </nav>
         </div>
-        {/* Related Topics */}
-        {curriculum.relatedTopics.length > 0 && (
-            <div>
-                <h2 className="px-2 text-xs font-semibold text-secondary uppercase tracking-wider mb-1">Related Topics</h2>
-                <nav>
-                    <ul>
-                        {curriculum.relatedTopics.map((topic) => {
-                            const isActive = topic === currentSessionId;
-                            return (
-                                <li key={topic}>
-                                    <button onClick={() => onSectionClick(topic, topic)}
-                                        className={`w-full text-left p-2 text-sm rounded-md flex items-center gap-3 ${isActive ? 'bg-accent/20 text-accent font-semibold' : 'hover:bg-muted/20'}`}>
-                                        <BookOpenIcon className="w-5 h-5 flex-shrink-0 text-secondary" />
-                                        {topic}
-                                    </button>
-                                </li>
-                            )
-                        })}
-                    </ul>
-                </nav>
+        {/* Session Notes */}
+        {currentSessionId && currentSessionId !== 'home' && (
+          <div>
+            <h2 className="px-2 text-xs font-semibold text-secondary uppercase tracking-wider mb-1 mt-4">
+              Session Notes
+            </h2>
+            <div className="p-2">
+              <textarea
+                value={sessionNotes[currentSessionId] || ''}
+                onChange={(e) => {
+                    const newNotes = e.target.value;
+                    setSessionNotes(prev => ({
+                        ...prev,
+                        [currentSessionId!]: newNotes,
+                    }));
+                }}
+                placeholder="Jot down notes for this lesson. They'll be included as context for ARIA."
+                className="w-full h-32 p-2 bg-background border border-muted rounded-md text-sm text-primary custom-scrollbar resize-y focus:outline-none focus:ring-2 focus:ring-accent"
+                aria-label="Session Notes"
+              />
             </div>
+          </div>
         )}
         </>
       ) : (
         <div className="p-4 text-center text-sm text-secondary">
-          <p>Your lesson plan and related topics will appear here after the initial setup.</p>
+          <p>Your lesson plan will appear here after the initial setup.</p>
         </div>
       )}
     </div>
@@ -251,35 +273,77 @@ const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 
-  const TabButton = ({ tab, label }: { tab: ActiveTab, label: string }) => (
-    <button
-      onClick={() => setActiveTab(tab)}
-      className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-        activeTab === tab
-          ? 'text-accent border-accent'
-          : 'text-secondary border-transparent hover:text-primary hover:border-muted'
-      }`}
-    >
-      {label}
-    </button>
-  );
+  const renderTasks = () => {
+    const [newTaskText, setNewTaskText] = useState('');
+
+    const handleAddTaskSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onAddTask(newTaskText);
+        setNewTaskText('');
+    };
+
+    return (
+        <div className="flex-1 flex flex-col p-2">
+            <form onSubmit={handleAddTaskSubmit} className="p-2 flex items-center gap-2 flex-shrink-0">
+                <input
+                    type="text"
+                    value={newTaskText}
+                    onChange={(e) => setNewTaskText(e.target.value)}
+                    placeholder="Add a new task..."
+                    className="flex-grow px-3 py-2 bg-background border border-muted text-primary rounded-md focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+                <button type="submit" className="p-2 bg-accent-dark rounded-md hover:bg-accent disabled:opacity-50" disabled={!newTaskText.trim()} aria-label="Add task">
+                    <PlusIcon className="w-5 h-5 text-background" />
+                </button>
+            </form>
+            <ul className="flex-1 overflow-y-auto custom-scrollbar space-y-1 p-1">
+                {tasks.length > 0 ? (
+                    tasks.map(task => (
+                        <TaskItem
+                            key={task.id}
+                            task={task}
+                            onToggle={onToggleTask}
+                            onDelete={onDeleteTask}
+                            onEdit={onEditTask}
+                        />
+                    ))
+                ) : (
+                    <div className="p-4 text-center text-sm text-secondary">
+                        <p>No tasks yet. Add one above to get started!</p>
+                    </div>
+                )}
+            </ul>
+        </div>
+    );
+  };
 
   return (
     <aside className="w-96 h-screen bg-surface flex flex-col border-r border-muted flex-shrink-0">
-      <header className="p-4 border-b border-muted flex items-center gap-3">
-        <AcademicCapIcon className="w-8 h-8 text-accent"/>
-        <h1 className="text-xl font-bold text-primary">ARIA</h1>
+      <header className="p-4 border-b border-muted flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+            <AcademicCapIcon className="w-8 h-8 text-accent"/>
+            <h1 className="text-xl font-bold text-primary">ARIA</h1>
+        </div>
+        <button
+            onClick={onShowTutorial}
+            className="p-2 rounded-full text-secondary hover:text-primary hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-accent"
+            aria-label="Show tutorial"
+        >
+            <QuestionMarkCircleIcon className="w-6 h-6" />
+        </button>
       </header>
       <div className="border-b border-muted flex-shrink-0">
         <nav className="flex justify-around">
-          <TabButton tab="lessons" label="Learn" />
-          <TabButton tab="diagrams" label={`Diagrams (${savedDiagrams.length})`} />
-          <TabButton tab="settings" label="Settings" />
+          <TabButton tab="lessons" label="Learn" activeTab={activeTab} onClick={setActiveTab} />
+          <TabButton tab="diagrams" label={`Diagrams (${savedDiagrams.length})`} activeTab={activeTab} onClick={setActiveTab} />
+          <TabButton tab="tasks" label={`Tasks (${incompleteTasksCount})`} activeTab={activeTab} onClick={setActiveTab} />
+          <TabButton tab="settings" label="Settings" activeTab={activeTab} onClick={setActiveTab} />
         </nav>
       </div>
 
       {activeTab === 'lessons' && renderLessons()}
       {activeTab === 'diagrams' && renderDiagrams()}
+      {activeTab === 'tasks' && renderTasks()}
       {activeTab === 'settings' && <div className="flex-1 overflow-y-auto custom-scrollbar">{renderSettings()}</div>}
     </aside>
   );

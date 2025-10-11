@@ -1,4 +1,3 @@
-
 import { PROVIDERS } from "./constants";
 
 export type Provider = keyof typeof PROVIDERS;
@@ -16,8 +15,6 @@ export interface Settings {
   temperature: number;
   topP: number;
   ttsEnabled: boolean;
-  elevenLabsApiKey: string;
-  elevenLabsVoiceId: string;
   googleCseApiKey: string;
   googleCseId: string;
 }
@@ -45,7 +42,6 @@ export interface TTSPlayback {
   isPlaying: boolean;
   isLoading: boolean;
   messageId: string | null;
-  audio: HTMLAudioElement | null;
 }
 
 // --- ARIA Specific Types ---
@@ -59,7 +55,6 @@ export interface Section {
 
 export interface Curriculum {
   sections: Section[];
-  relatedTopics: string[];
 }
 
 
@@ -89,6 +84,12 @@ export interface SavedDiagram {
     title: string;
     pngDataUrl: string;
     sourceText: string;
+}
+
+export interface Task {
+  id: string;
+  text: string;
+  completed: boolean;
 }
 
 // --- Research Panel Types ---

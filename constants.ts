@@ -1,5 +1,3 @@
-
-
 import { Settings, SFLConfig } from './types';
 
 export const PROVIDERS = {
@@ -45,8 +43,6 @@ export const INITIAL_SETTINGS: Settings = {
   temperature: 0.7,
   topP: 1.0,
   ttsEnabled: false,
-  elevenLabsApiKey: '',
-  elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM', // Rachel
   googleCseApiKey: '',
   googleCseId: '',
 };
@@ -129,18 +125,6 @@ export const MODEL_GUIDE: Record<string, {name: string, description: string, str
     },
 };
 
-
-export const ELEVENLABS_VOICES = [
-    { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" },
-    { id: "29vD33N1CtxCmqQRPO9t", name: "Drew" },
-    { id: "5Q0t7uMcjvnagumLfvZi", name: "Clyde" },
-    { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi" },
-    { id: "CYw3kZ02Hs0563khs1Fj", name: "Dave" },
-    { id: "D38z5RcWu1voky8WS1ja", name: "Fin" },
-    { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah" },
-    { id: "ErXwobaYiN019PkySvjV", name: "Antoni" },
-];
-
 // --- SFL Constants ---
 
 export const TASK_TYPES = [
@@ -177,6 +161,15 @@ export const DESIRED_TONES = [
     'Encouraging',
 ] as const;
 
+export const INTERPERSONAL_STANCES = [
+    'Neutral Observer',
+    'Formal Authority',
+    'Peer Collaborator',
+    'Empathetic Guide',
+    'Critical Challenger',
+    'Creative Muse',
+] as const;
+
 export const OUTPUT_FORMATS = [
     'Plain Text',
     'Markdown',
@@ -204,7 +197,7 @@ export const DEFAULT_SFL_CONFIG: SFLConfig = {
         aiPersona: 'Friendly AI Assistant',
         targetAudience: 'University Student',
         desiredTone: 'Encouraging',
-        interpersonalStance: '',
+        interpersonalStance: 'Peer Collaborator',
     },
     sflMode: {
         outputFormat: 'Markdown',

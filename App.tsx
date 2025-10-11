@@ -1,8 +1,7 @@
-
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import mermaid from 'mermaid';
-import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults, Provider } from './types';
-import { generateCurriculum, generateDiagramData, streamText, generateRelatedTopics, generateQuiz, generateLessonIntro, generateImage, fetchSearchResults } from './services/aiService';
+import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults, Provider, Task } from './types';
+import { generateCurriculum, generateDiagramData, streamText, generateQuiz, generateLessonIntro, generateImage, fetchSearchResults } from './services/aiService';
 import { playTTS, stopTTS } from './services/elevenLabsService';
 import { INITIAL_SETTINGS, DEFAULT_SFL_CONFIG } from './constants';
 import Sidebar from './components/Sidebar';
@@ -12,16 +11,18 @@ import LandingPage from './components/LandingPage';
 import ProviderSetupPage from './components/ProviderSetupPage';
 import SFLWizardPage from './components/SFLWizardPage';
 import ResearchPanel from './components/ResearchPanel';
+import Tutorial from './components/Tutorial';
 
 type Page = 'landing' | 'setupProvider' | 'setupSFL' | 'main';
 
 const App: React.FC = () => {
   const [page, setPage] = useState<Page>('landing');
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // Playground State
   const [settings, setSettings] = useState<Settings>(INITIAL_SETTINGS);
   const [apiKeyStatus, setApiKeyStatus] = useState<Record<string, ApiKeyStatus>>({});
-  const [ttsPlayback, setTtsPlayback] = useState<TTSPlayback>({ isPlaying: false, isLoading: false, messageId: null, audio: null });
+  const [ttsPlayback, setTtsPlayback] = useState<TTSPlayback>({ isPlaying: false, isLoading: false, messageId: null });
   const [dynamicModels, setDynamicModels] = useState<Record<string, string[]>>({});
 
   // ARIA State
@@ -30,8 +31,12 @@ const App: React.FC = () => {
   const [savedDiagrams, setSavedDiagrams] = useState<SavedDiagram[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>('home');
   const [checkpoints, setCheckpoints] = useState<Record<string, Message[]>>({ 'home': [] });
+  const [sessionNotes, setSessionNotes] = useState<Record<string, string>>({});
   const [viewingDiagram, setViewingDiagram] = useState<SavedDiagram | null>(null);
   const [initialContextFiles, setInitialContextFiles] = useState<FileAttachment[]>([]);
+  
+  // Task Management State
+  const [tasks, setTasks] = useState<Task[]>([]);
   
   // Research Panel State
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
@@ -47,6 +52,45 @@ const App: React.FC = () => {
   useEffect(() => {
     mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
   }, []);
+
+  useEffect(() => {
+    if (page === 'main') {
+        const tutorialCompleted = localStorage.getItem('aria-tutorial-completed');
+        if (!tutorialCompleted) {
+            setShowTutorial(true);
+        }
+    }
+  }, [page]);
+
+  // Load tasks from localStorage on initial mount
+  useEffect(() => {
+    try {
+      const savedTasks = localStorage.getItem('aria-tasks');
+      if (savedTasks) {
+        setTasks(JSON.parse(savedTasks));
+      }
+    } catch (error) {
+      console.error('Failed to load tasks from localStorage', error);
+    }
+  }, []);
+
+  // Save tasks to localStorage whenever they change
+  useEffect(() => {
+    try {
+      if (tasks.length > 0) {
+        localStorage.setItem('aria-tasks', JSON.stringify(tasks));
+      } else {
+        localStorage.removeItem('aria-tasks');
+      }
+    } catch (error) {
+      console.error('Failed to save tasks to localStorage', error);
+    }
+  }, [tasks]);
+  
+  const handleCloseTutorial = () => {
+    setShowTutorial(false);
+    localStorage.setItem('aria-tutorial-completed', 'true');
+  };
 
   const messages = useMemo(() => {
     return checkpoints[currentSessionId || 'home'] || [];
@@ -77,17 +121,23 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     if (sflConfig) {
         if (sflConfig.sflTenor.aiPersona) basePrompt += `\n- Your persona: ${sflConfig.sflTenor.aiPersona}.`;
         if (sflConfig.sflTenor.targetAudience) basePrompt += `\n- Tailor your language for: ${sflConfig.sflTenor.targetAudience}.`;
+        if (sflConfig.sflTenor.desiredTone) basePrompt += `\n- Adopt a tone that is: ${sflConfig.sflTenor.desiredTone}.`;
+        if (sflConfig.sflTenor.interpersonalStance) basePrompt += `\n- Your stance towards the user should be that of a: ${sflConfig.sflTenor.interpersonalStance}.`;
         if (sflConfig.sflMode.outputFormat) basePrompt += `\n- Format your response as: ${sflConfig.sflMode.outputFormat}.`;
     }
 
     const activeSection = curriculum?.sections.find(s => s.id === currentSessionId);
     if (activeSection) {
         basePrompt += `\n\n# CURRENT LESSON\nFocus your response exclusively on teaching the following topic: "${activeSection.title}".`;
-    } else if (currentSessionId && currentSessionId !== 'home' && curriculum?.relatedTopics.includes(currentSessionId)) {
-        basePrompt += `\n\n# CURRENT LESSON\nFocus your response exclusively on teaching the following related topic: "${currentSessionId}".`;
     }
+    
+    const currentNote = sessionNotes[currentSessionId || 'home'];
+    if (currentNote && currentNote.trim()) {
+        basePrompt += `\n\n# USER'S NOTES FOR THIS LESSON\nThe user has provided the following notes for context. Refer to these notes when formulating your response:\n${currentNote.trim()}`;
+    }
+    
     return basePrompt;
-  }, [sflConfig, currentSessionId, curriculum, initialContextFiles]);
+  }, [sflConfig, currentSessionId, curriculum, initialContextFiles, sessionNotes]);
 
   const handleFetchSearch = useCallback(async (query: string) => {
     if (!settings.googleCseApiKey || !settings.googleCseId) {
@@ -114,10 +164,8 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     try {
       setLoadingMessage('Generating your personalized curriculum...');
       const sections = await generateCurriculum(topic, files, settings);
-      setLoadingMessage('Discovering related topics for deeper learning...');
-      const relatedTopics = await generateRelatedTopics(topic, files, settings);
-      setCurriculum({ sections, relatedTopics });
-       const initialMessage: Message = { id: Date.now().toString(), role: Role.ASSISTANT, content: `I've generated your personalized curriculum and found some related topics for **${topic}**. You can see them in the sidebar. Click any lesson to begin!` };
+      setCurriculum({ sections });
+       const initialMessage: Message = { id: Date.now().toString(), role: Role.ASSISTANT, content: `I've generated your personalized curriculum for **${topic}**. You can see it in the sidebar. Click any lesson to begin!` };
        setMessages(prev => [...prev, initialMessage]);
     } catch(e: any) {
         setError(`Initialization failed: ${e.message}`);
@@ -128,36 +176,48 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
   }
 
   const handleSendMessage = useCallback(async (prompt: string, isRetry = false) => {
-    const finalPrompt = (isRetry && messages.length > 0) ? messages[messages.length - 1].content : prompt;
-    if (!finalPrompt.trim() && attachedFiles.length === 0) return;
+    let finalPrompt = prompt;
+    // If files are attached and the user hasn't provided a prompt, default to summarization.
+    if (attachedFiles.length > 0 && !finalPrompt.trim() && !isRetry) {
+        const fileNames = attachedFiles.map(f => f.name).join(', ');
+        finalPrompt = `Please provide a concise summary for the following file(s): ${fileNames}.`;
+    }
+
+    if (!finalPrompt.trim() && attachedFiles.length === 0 && !isRetry) return;
     
     setError(null);
     setIsLoading(true);
-    stopTTS(ttsPlayback);
-    setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null, audio: null });
+    stopTTS();
+    setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null });
+
+    const messagesForApi = isRetry ? messages : [...messages, { 
+        id: Date.now().toString(), 
+        role: Role.USER, 
+        content: finalPrompt, 
+        files: attachedFiles 
+    }];
     
-    const userMessage: Message = { id: Date.now().toString(), role: Role.USER, content: finalPrompt, files: attachedFiles };
-    const currentMessages = isRetry ? messages.slice(0, -1) : [...messages, userMessage];
-    setMessages(currentMessages);
+    if (!isRetry) {
+        setMessages(messagesForApi);
+        setAttachedFiles([]);
+    }
     
-    let currentMessageId = (Date.now() + 1).toString();
+    const currentMessageId = (Date.now() + 1).toString();
     const assistantMessage: Message = { id: currentMessageId, role: Role.ASSISTANT, content: '' };
     setMessages(prev => [...prev, assistantMessage]);
-    setAttachedFiles([]);
 
     try {
-        const result = await streamText(settings, systemPrompt, currentMessages);
-        let fullResponseText = '';
+        const result = await streamText(settings, systemPrompt, messagesForApi);
 
         for await (const delta of result.textStream) {
-            fullResponseText += delta;
+            if (delta) {
+                setMessages(prev => prev.map(msg =>
+                    msg.id === currentMessageId
+                        ? { ...msg, content: msg.content + delta }
+                        : msg
+                ));
+            }
         }
-
-        setMessages(prev => prev.map(msg =>
-            msg.id === currentMessageId
-                ? { ...msg, content: fullResponseText.trim() }
-                : msg
-        ));
         
         const finalResponse = result.getFinalResponse();
         const groundingMetadata = finalResponse?.candidates?.[0]?.groundingMetadata;
@@ -168,12 +228,19 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
                     if (msg.id === currentMessageId) {
                         return {
                             ...msg,
+                            content: msg.content.trim(),
                             groundingMetadata: groundingMetadata.groundingChunks as any[],
                         };
                     }
                     return msg;
                 });
             });
+        } else {
+             setMessages(prev => prev.map(msg =>
+                msg.id === currentMessageId
+                    ? { ...msg, content: msg.content.trim() }
+                    : msg
+            ));
         }
     } catch (e: any) {
         console.error(e);
@@ -183,7 +250,7 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     } finally {
         setIsLoading(false);
     }
-  }, [messages, settings, systemPrompt, ttsPlayback, attachedFiles, setMessages, initialContextFiles]);
+  }, [messages, settings, systemPrompt, attachedFiles, setMessages]);
 
   const handleContinue = useCallback(() => {
     handleSendMessage('Continue');
@@ -248,51 +315,59 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
   }, [curriculum, messages, settings, setMessages]);
 
 
-  const handleTTS = useCallback(async (message: Message) => {
-    if (!settings.ttsEnabled || !settings.elevenLabsApiKey) return;
-    
+  const handleTTS = useCallback((message: Message) => {
+    if (!settings.ttsEnabled) return;
+
     const contentToPlay = message.content;
     if (!contentToPlay) return;
 
+    // If we click the button on the message that is currently playing, stop it.
     if (ttsPlayback.isPlaying && ttsPlayback.messageId === message.id) {
-        stopTTS(ttsPlayback);
-        setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null, audio: null });
+        stopTTS();
+        setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null });
         return;
     }
     
-    // UI should prevent this, but as a safeguard.
-    if (ttsPlayback.isLoading) return;
+    // Stop any currently playing audio before starting a new one.
+    stopTTS();
 
-    stopTTS(ttsPlayback);
-    setTtsPlayback({ isPlaying: false, isLoading: true, messageId: message.id, audio: null });
-    
-    try {
-        setError(null);
-        const audio = await playTTS(contentToPlay, settings.elevenLabsVoiceId, settings.elevenLabsApiKey);
-        audio.onended = () => setTtsPlayback(current => {
-            if (current.audio === audio) {
-                return { isPlaying: false, isLoading: false, messageId: null, audio: null };
-            }
-            return current;
-        });
+    // Set loading state for the new message
+    setTtsPlayback({ isPlaying: false, isLoading: true, messageId: message.id });
+
+    const onStart = () => {
         setTtsPlayback(current => {
+            // Only switch to playing if we are still loading this specific message
             if (current.isLoading && current.messageId === message.id) {
-                return { isPlaying: true, isLoading: false, messageId: message.id, audio };
+                return { isPlaying: true, isLoading: false, messageId: message.id };
             }
-            // another request was initiated. this result is stale.
-            stopTTS({ ...current, audio });
+            return current; // State changed for another reason, do nothing.
+        });
+    };
+
+    const onEnd = () => {
+        setTtsPlayback(current => {
+            // Only reset state if the ended message is the one we think is playing
+            if (current.messageId === message.id) {
+                return { isPlaying: false, isLoading: false, messageId: null };
+            }
             return current;
         });
-    } catch(e: any) {
-        setError(`TTS Error: ${e.message}`);
+    };
+
+    const onError = (e: SpeechSynthesisErrorEvent) => {
+        console.error("TTS Error:", e);
+        setError(`TTS Error: ${e.error}`);
+        // Reset state if this message caused the error
         setTtsPlayback(current => {
-            if(current.isLoading && current.messageId === message.id) {
-               return { isPlaying: false, isLoading: false, messageId: null, audio: null };
+            if (current.messageId === message.id) {
+                return { isPlaying: false, isLoading: false, messageId: null };
             }
             return current;
         });
     }
-  }, [settings, ttsPlayback]);
+
+    playTTS(contentToPlay, onStart, onEnd, onError);
+  }, [settings.ttsEnabled, ttsPlayback, setError]);
 
   const handleStartNewLesson = async (sectionId: string, sectionTitle: string) => {
     setCurrentSessionId(sectionId);
@@ -369,6 +444,24 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     // Send message to AI
     handleSendMessage(`Please teach me about: "${subtopic}"`);
   }, [currentSessionId, setMessages, handleSendMessage]);
+
+  const handleAddTask = (text: string) => {
+    if (!text.trim()) return;
+    const newTask: Task = { id: Date.now().toString(), text: text.trim(), completed: false };
+    setTasks(prev => [...prev, newTask]);
+  };
+
+  const handleToggleTask = (id: string) => {
+      setTasks(prev => prev.map(task => task.id === id ? { ...task, completed: !task.completed } : task));
+  };
+
+  const handleDeleteTask = (id: string) => {
+      setTasks(prev => prev.filter(task => task.id !== id));
+  };
+
+  const handleEditTask = (id: string, newText: string) => {
+      setTasks(prev => prev.map(task => task.id === id ? { ...task, text: newText.trim() } : task));
+  };
   
   const renderPage = () => {
     switch(page) {
@@ -391,7 +484,7 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
                     onBack={() => setPage('setupProvider')}
                 />;
       case 'main':
-        const lessonTitle = curriculum?.sections.find(s => s.id === currentSessionId)?.title || (currentSessionId !== 'home' && curriculum?.relatedTopics.includes(currentSessionId!) ? currentSessionId : null);
+        const lessonTitle = curriculum?.sections.find(s => s.id === currentSessionId)?.title || null;
         
         return (
           <div className="flex h-screen bg-background font-sans">
@@ -407,6 +500,14 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
               onDeleteDiagram={(id) => setSavedDiagrams(prev => prev.filter(d => d.id !== id))}
               onTakeQuiz={handleTakeQuiz}
               dynamicModels={dynamicModels}
+              onShowTutorial={() => setShowTutorial(true)}
+              tasks={tasks}
+              onAddTask={handleAddTask}
+              onToggleTask={handleToggleTask}
+              onDeleteTask={handleDeleteTask}
+              onEditTask={handleEditTask}
+              sessionNotes={sessionNotes}
+              setSessionNotes={setSessionNotes}
             />
             <ChatPanel
               messages={messages}
@@ -444,6 +545,7 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
                   onClose={() => setViewingDiagram(null)}
               />
             )}
+            {showTutorial && <Tutorial onClose={handleCloseTutorial} />}
           </div>
         );
     }

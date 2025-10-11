@@ -1,11 +1,7 @@
-
-
-
-
 import React, { useState, useRef } from 'react';
 import { SFLConfig, FileAttachment, Settings } from '../types';
-import { DEFAULT_SFL_CONFIG, AI_PERSONAS, TARGET_AUDIENCES, DESIRED_TONES, OUTPUT_FORMATS } from '../constants';
-import { readFileAsText } from '../utils';
+import { DEFAULT_SFL_CONFIG, AI_PERSONAS, TARGET_AUDIENCES, DESIRED_TONES, OUTPUT_FORMATS, INTERPERSONAL_STANCES } from '../constants';
+import { processFile } from '../utils';
 import { generateTopicFromFiles } from '../services/aiService';
 import { PaperclipIcon } from './icons/PaperclipIcon';
 import { TrashIcon } from './icons/TrashIcon';
@@ -21,6 +17,7 @@ const steps = [
   { id: 'persona', title: "How should your assistant behave?" },
   { id: 'audience', title: "Who is this for?" },
   { id: 'tone', title: "What should the tone be?" },
+  { id: 'stance', title: "What is the assistant's stance?" },
   { id: 'format', title: "How should responses be formatted?" },
   { id: 'review', title: "Review and Start Learning" },
 ];
@@ -75,20 +72,18 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
       const inputFiles = e.target.files;
       if (inputFiles) {
         const remainingSlots = MAX_FILES - files.length;
-        const filesToProcess = Array.from(inputFiles).slice(0, remainingSlots);
+        // Fix: Cast Array.from(inputFiles) to File[] as TypeScript was incorrectly inferring it as unknown[].
+        const filesToProcess: File[] = (Array.from(inputFiles) as File[]).slice(0, remainingSlots);
 
         const newAttachments = [...files];
 
         for (const file of filesToProcess) {
             try {
-                const content = await readFileAsText(file);
-                newAttachments.push({
-                    name: file.name,
-                    type: file.type,
-                    content: content,
-                });
-            } catch (err) {
-                setError(`Error reading file ${file.name}`);
+                const attachment = await processFile(file);
+                newAttachments.push(attachment);
+            } catch (err: any) {
+                console.error(`Error processing file ${file.name}:`, err);
+                setError(`Error processing "${file.name}": ${err.message}`);
             }
         }
         setFiles(newAttachments);
@@ -126,7 +121,7 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
                         ref={fileInputRef} 
                         onChange={handleFileChange} 
                         className="hidden" 
-                        accept=".md,.txt,.csv"
+                        accept=".md,.txt,.csv,.pdf,.docx"
                         multiple
                         disabled={files.length >= MAX_FILES}
                     />
@@ -163,13 +158,40 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
             </div>
         );
       case 'persona':
-        return <OptionSelector options={AI_PERSONAS} selected={sflConfig.sflTenor.aiPersona} onSelect={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, aiPersona: value}}))} />;
+        return <OptionSelector
+                    options={AI_PERSONAS}
+                    value={sflConfig.sflTenor.aiPersona || ''}
+                    onValueChange={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, aiPersona: value}}))}
+                    placeholder="e.g., A patient history professor"
+                />;
       case 'audience':
-        return <OptionSelector options={TARGET_AUDIENCES} selected={sflConfig.sflTenor.targetAudience} onSelect={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, targetAudience: value}}))} />;
+        return <OptionSelector
+                    options={TARGET_AUDIENCES}
+                    value={sflConfig.sflTenor.targetAudience || ''}
+                    onValueChange={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, targetAudience: value}}))}
+                    placeholder="e.g., A group of marketing executives"
+                />;
       case 'tone':
-        return <OptionSelector options={DESIRED_TONES} selected={sflConfig.sflTenor.desiredTone} onSelect={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, desiredTone: value}}))} />;
+        return <OptionSelector
+                    options={DESIRED_TONES}
+                    value={sflConfig.sflTenor.desiredTone || ''}
+                    onValueChange={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, desiredTone: value}}))}
+                    placeholder="e.g., Professional yet witty"
+                />;
+      case 'stance':
+        return <OptionSelector
+                    options={INTERPERSONAL_STANCES}
+                    value={sflConfig.sflTenor.interpersonalStance || ''}
+                    onValueChange={value => setSflConfig(p => ({...p, sflTenor: {...p.sflTenor, interpersonalStance: value}}))}
+                    placeholder="e.g., A partner in discovery"
+                />;
       case 'format':
-        return <OptionSelector options={OUTPUT_FORMATS} selected={sflConfig.sflMode.outputFormat} onSelect={value => setSflConfig(p => ({...p, sflMode: {...p.sflMode, outputFormat: value}}))} />;
+        return <OptionSelector
+                    options={OUTPUT_FORMATS}
+                    value={sflConfig.sflMode.outputFormat || ''}
+                    onValueChange={value => setSflConfig(p => ({...p, sflMode: {...p.sflMode, outputFormat: value}}))}
+                    placeholder="e.g., A JSON object with 'key' and 'value'"
+                />;
       case 'review':
         return <ReviewStep config={sflConfig} topic={topic} />;
       default:
@@ -235,26 +257,46 @@ const SFLWizardPage: React.FC<SFLWizardPageProps> = ({ onFinish, onBack, setting
   );
 };
 
-const OptionSelector: React.FC<{options: readonly string[], selected?: string, onSelect: (value: string) => void}> = ({ options, selected, onSelect }) => (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {options.map(option => (
-            <button
-                key={option}
-                onClick={() => onSelect(option)}
-                className={`p-6 rounded-lg border-2 transition-colors ${selected === option ? 'bg-accent/20 border-accent' : 'bg-surface border-muted hover:border-accent/50'}`}
-            >
-                <span className="text-lg font-medium text-primary">{option}</span>
-            </button>
-        ))}
+const OptionSelector: React.FC<{
+  options: readonly string[],
+  value?: string,
+  onValueChange: (value: string) => void,
+  placeholder: string,
+}> = ({ options, value, onValueChange, placeholder }) => (
+    <div className="w-full max-w-lg space-y-6">
+      <input
+        type="text"
+        value={value}
+        onChange={e => onValueChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full p-4 text-xl bg-surface border-2 border-muted rounded-lg focus:outline-none focus:ring-4 focus:ring-accent/50 transition placeholder-secondary"
+      />
+      <div className="flex items-center gap-4">
+          <hr className="flex-grow border-muted"/>
+          <span className="text-secondary text-sm uppercase">Or Select a Suggestion</span>
+          <hr className="flex-grow border-muted"/>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {options.map(option => (
+              <button
+                  key={option}
+                  onClick={() => onValueChange(option)}
+                  className={`p-4 rounded-lg border-2 transition-colors h-full ${value === option ? 'bg-accent/20 border-accent' : 'bg-surface border-muted hover:border-accent/50'}`}
+              >
+                  <span className="text-lg font-medium text-primary">{option}</span>
+              </button>
+          ))}
+      </div>
     </div>
 );
 
 const ReviewStep: React.FC<{config: SFLConfig, topic: string}> = ({ config, topic }) => (
     <div className="text-left bg-surface border border-muted p-6 rounded-lg max-w-md mx-auto space-y-3">
-        <p className="text-primary"><strong>Topic:</strong> <span className="text-accent">{topic}</span></p>
+        <p className="text-primary"><strong>Topic:</strong> <span className="text-accent">{topic || '(To be generated from files)'}</span></p>
         <p className="text-primary"><strong>Tutor Persona:</strong> <span className="text-accent">{config.sflTenor.aiPersona}</span></p>
         <p className="text-primary"><strong>For:</strong> <span className="text-accent">{config.sflTenor.targetAudience}</span></p>
         <p className="text-primary"><strong>Tone:</strong> <span className="text-accent">{config.sflTenor.desiredTone}</span></p>
+        <p className="text-primary"><strong>Stance:</strong> <span className="text-accent">{config.sflTenor.interpersonalStance}</span></p>
         <p className="text-primary"><strong>Format:</strong> <span className="text-accent">{config.sflMode.outputFormat}</span></p>
     </div>
 );
