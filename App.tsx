@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { Settings, Message, TTSPlayback, Role, Curriculum, SFLConfig, SavedDiagram, FileAttachment, ApiKeyStatus, SearchResults, Provider, Task } from './types';
 import { generateCurriculum, generateDiagramData, streamText, generateQuiz, generateLessonIntro, generateImage, fetchSearchResults } from './services/aiService';
-import { playTTS, stopTTS } from './services/elevenLabsService';
 import { INITIAL_SETTINGS, DEFAULT_SFL_CONFIG } from './constants';
 import Sidebar from './components/Sidebar';
 import ChatPanel from './components/ChatPanel';
@@ -48,6 +47,9 @@ const App: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
+  
+  // TTS State
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
@@ -106,12 +108,24 @@ const App: React.FC = () => {
 
   const systemPrompt = useMemo(() => {
     let basePrompt = `You are ARIA, the Adaptive Research & Information Assistant. Your responses must be grounded using Google Search to provide accurate, up-to-date information.
-Your primary directive is to provide concise, focused answers. Your responses should be limited to a maximum of two paragraphs, with each paragraph containing 3-4 sentences.
-After providing your initial response, ALWAYS CONCLUDE with a clear, specific, and relevant question to encourage the user to continue the conversation or delve deeper. For example, instead of a generic "What's next?", ask "Would you like me to explain the role of chlorophyll in this process?". Do not add a "Continue" button or any similar UI elements in your text.`;
+
+# Formatting Guidelines
+Your primary goal is to provide clear, engaging, and well-structured answers. Use a comprehensive range of markdown elements to enhance readability and visual appeal.
+
+- **Headings:** Use ## and ### to organize your response into logical sections.
+- **Emphasis:** Use **bold** and *italics* to highlight key terms and concepts.
+- **Lists:** Use ordered (1.) and unordered (-) lists to present information clearly.
+- **Code:** Use \`inline code\` for snippets and fenced code blocks (\`\`\`language) for longer examples.
+- **Blockquotes:** Use > to emphasize definitions, quotes, or important notes.
+- **Emojis:** Integrate relevant emojis (like ✨, 💡, 📌, ✅, 🚀) to add personality and visual cues.
+- **Separators:** Use horizontal rules (---) to separate distinct sections of a long response.
+
+# Interaction Style
+Keep your answers focused and easy to digest. After providing your main response, ALWAYS CONCLUDE with a clear, specific, and relevant question to encourage deeper conversation. For example, ask "Would you like to explore how Python's list comprehensions are optimized under the hood?". Do not add a "Continue" button or any similar UI elements in your text.`;
 
     if (initialContextFiles.length > 0) {
         const fileContext = initialContextFiles.map(file =>
-            `--- START OF SOURCE FILE: ${file.name} ---\n${file.content}\n--- END OF SOURCE FILE: ${file.name} ---`
+            `--- START OF SOURCE FILE: ${file.name} ---\n${file.content}\n--- END OF FILE: ${file.name} ---`
         ).join('\n\n');
         basePrompt += `\n\nThe user has provided the following source documents. Base your curriculum and all responses on this content:\n${fileContext}`;
     }
@@ -139,6 +153,18 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     return basePrompt;
   }, [sflConfig, currentSessionId, curriculum, initialContextFiles, sessionNotes]);
 
+  const stopTTS = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking) {
+        if (utteranceRef.current) {
+            utteranceRef.current.onstart = null;
+            utteranceRef.current.onend = null;
+            utteranceRef.current.onerror = null;
+            utteranceRef.current = null;
+        }
+        window.speechSynthesis.cancel();
+    }
+  }, []);
+
   const handleFetchSearch = useCallback(async (query: string) => {
     if (!settings.googleCseApiKey || !settings.googleCseId) {
         return; // Don't search if not configured
@@ -162,10 +188,21 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     setIsLoading(true);
     setPage('main');
     try {
-      setLoadingMessage('Generating your personalized curriculum...');
-      const sections = await generateCurriculum(topic, files, settings);
+      setLoadingMessage('Generating your personalized curriculum and tasks...');
+      const { sections, tasks: newTasks } = await generateCurriculum(topic, files, settings);
       setCurriculum({ sections });
-       const initialMessage: Message = { id: Date.now().toString(), role: Role.ASSISTANT, content: `I've generated your personalized curriculum for **${topic}**. You can see it in the sidebar. Click any lesson to begin!` };
+      
+      // Add new tasks to the beginning of the list
+      if (newTasks && newTasks.length > 0) {
+          const taskObjects: Task[] = newTasks.map((taskText, index) => ({
+              id: `${Date.now()}-${index}`,
+              text: taskText,
+              completed: false,
+          }));
+          setTasks(prevTasks => [...taskObjects, ...prevTasks]);
+      }
+
+       const initialMessage: Message = { id: Date.now().toString(), role: Role.ASSISTANT, content: `I've generated your personalized curriculum for **${topic}**. You can see it in the sidebar. I've also added some initial tasks to your task list to get you started!` };
        setMessages(prev => [...prev, initialMessage]);
     } catch(e: any) {
         setError(`Initialization failed: ${e.message}`);
@@ -250,7 +287,7 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     } finally {
         setIsLoading(false);
     }
-  }, [messages, settings, systemPrompt, attachedFiles, setMessages]);
+  }, [messages, settings, systemPrompt, attachedFiles, setMessages, stopTTS]);
 
   const handleContinue = useCallback(() => {
     handleSendMessage('Continue');
@@ -334,9 +371,15 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
     // Set loading state for the new message
     setTtsPlayback({ isPlaying: false, isLoading: true, messageId: message.id });
 
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+        console.error("Browser does not support the Web Speech API.");
+        setError("Text-to-Speech is not supported by your browser.");
+        setTtsPlayback({ isPlaying: false, isLoading: false, messageId: null });
+        return;
+    }
+
     const onStart = () => {
         setTtsPlayback(current => {
-            // Only switch to playing if we are still loading this specific message
             if (current.isLoading && current.messageId === message.id) {
                 return { isPlaying: true, isLoading: false, messageId: message.id };
             }
@@ -365,9 +408,15 @@ After providing your initial response, ALWAYS CONCLUDE with a clear, specific, a
             return current;
         });
     }
+    
+    const utterance = new SpeechSynthesisUtterance(contentToPlay);
+    utteranceRef.current = utterance;
+    utterance.onstart = onStart;
+    utterance.onend = onEnd;
+    utterance.onerror = onError;
 
-    playTTS(contentToPlay, onStart, onEnd, onError);
-  }, [settings.ttsEnabled, ttsPlayback, setError]);
+    window.speechSynthesis.speak(utterance);
+  }, [settings.ttsEnabled, ttsPlayback, setError, stopTTS]);
 
   const handleStartNewLesson = async (sectionId: string, sectionTitle: string) => {
     setCurrentSessionId(sectionId);

@@ -341,17 +341,22 @@ export const fetchAvailableModels = async (settings: Settings): Promise<string[]
 };
 
 // --- ARIA Specific Functions ---
-const CURRICULUM_SYSTEM_INSTRUCTION = `You are an expert curriculum designer. Your task is to generate a structured learning plan based on the user's request.
-Respond ONLY with the curriculum in markdown format. Do not add any conversational text, introductions, or summaries.
-The output must be a clean list of modules and lessons.
-Use ## for major modules or topics. These are parent sections.
-Use ### for individual lessons or sub-topics within a module. These are child sections.
-Example:
-## Module 1: Introduction
-### Lesson 1.1: What is Python?
-### Lesson 1.2: Setting up your environment
-## Module 2: Core Concepts
-### Lesson 2.1: Variables and Data Types`;
+const CURRICULUM_SYSTEM_INSTRUCTION = `You are an expert curriculum designer. Your task is to generate a structured learning plan and a set of high-level tasks based on the user's request.
+Respond ONLY with a single, valid JSON object. Do not add any conversational text, introductions, or summaries.
+The JSON object must have two keys:
+1. "curriculum": A string containing the curriculum in markdown format. Use ## for major modules and ### for individual lessons. All newlines within this string MUST be escaped as \\n.
+2. "tasks": An array of 3-5 strings, where each string is a high-level, actionable task for the user to complete as they go through the curriculum.
+
+Example Response:
+{
+  "curriculum": "## Module 1: Introduction to Python\\n### Lesson 1.1: What is Python?\\n### Lesson 1.2: Setting up your environment\\n## Module 2: Core Concepts\\n### Lesson 2.1: Variables and Data Types",
+  "tasks": [
+    "Set up a Python development environment on your computer.",
+    "Complete all lessons and exercises in Module 1.",
+    "Write a simple script that uses variables and prints output.",
+    "Build the final project for the Python course."
+  ]
+}`;
 
 const DIAGRAM_SYSTEM_INSTRUCTION = `You are an expert diagramming assistant. Your task is to generate a Mermaid.js diagram based on the user's request.
 **IMPORTANT RULES:**
@@ -416,7 +421,7 @@ const parseSectionsFromMarkdown = (content: string): Section[] => {
     return sections;
 };
 
-export async function generateCurriculum(topic: string, files: FileAttachment[], settings: Settings): Promise<Section[]> {
+export async function generateCurriculum(topic: string, files: FileAttachment[], settings: Settings): Promise<{ sections: Section[], tasks: string[] }> {
     let prompt = `Generate a curriculum for: ${topic}`;
 
     if (files.length > 0) {
@@ -424,11 +429,83 @@ export async function generateCurriculum(topic: string, files: FileAttachment[],
         prompt += `\n\nBase the curriculum on the following source material:\n${fileContent}`;
     }
 
-    const text = await generateText(settings, prompt, CURRICULUM_SYSTEM_INSTRUCTION);
+    const text = await generateText(settings, prompt, CURRICULUM_SYSTEM_INSTRUCTION, "application/json");
     if (!text) throw new Error("Failed to generate curriculum. The model returned an empty response.");
-    const sections = parseSectionsFromMarkdown(text);
-    if (sections.length === 0) throw new Error("Could not parse a curriculum from the model's response.");
-    return sections;
+
+    try {
+        const data = parseJsonFromText(text);
+        if (typeof data.curriculum !== 'string' || !Array.isArray(data.tasks)) {
+            throw new Error("Invalid JSON structure received from model.");
+        }
+        
+        const sections = parseSectionsFromMarkdown(data.curriculum);
+        if (sections.length === 0) {
+             throw new Error("Could not parse a curriculum from the model's response markdown.");
+        }
+        
+        const tasks = data.tasks.filter((t: any) => typeof t === 'string');
+        
+        return { sections, tasks };
+
+    } catch (e) {
+        console.warn("Initial JSON parse failed, attempting to fix and retry.", e);
+        
+        try {
+            // Attempt to fix unescaped characters in the "curriculum" string value, a common LLM failure.
+            const curriculumRegex = /"curriculum"\s*:\s*"/;
+            const tasksRegex = /"tasks"\s*:/;
+
+            const curriculumMatch = text.match(curriculumRegex);
+            const tasksMatch = text.match(tasksRegex);
+
+            if (!curriculumMatch || typeof curriculumMatch.index === 'undefined' || !tasksMatch || typeof tasksMatch.index === 'undefined') {
+                throw new Error("Could not find curriculum/tasks markers to fix JSON.");
+            }
+
+            const curriculumValueStartIndex = curriculumMatch.index + curriculumMatch[0].length;
+            const tasksStartIndex = tasksMatch.index;
+            
+            const commaBetweenProperties = text.lastIndexOf(',', tasksStartIndex);
+            if (commaBetweenProperties === -1) {
+                throw new Error("Could not find comma separator between curriculum and tasks.");
+            }
+
+            const curriculumValueEndIndex = text.lastIndexOf('"', commaBetweenProperties);
+            if (curriculumValueEndIndex <= curriculumValueStartIndex) {
+                 throw new Error("Could not determine curriculum value boundaries.");
+            }
+
+            const rawCurriculumValue = text.substring(curriculumValueStartIndex, curriculumValueEndIndex);
+            
+            // Properly escape the raw string. JSON.stringify handles quotes, newlines, etc.
+            const jsonEscapedCurriculumValue = JSON.stringify(rawCurriculumValue).slice(1, -1);
+
+            // Reconstruct the string with the escaped value.
+            const fixedText = text.substring(0, curriculumValueStartIndex) + jsonEscapedCurriculumValue + text.substring(curriculumValueEndIndex);
+            
+            const data = parseJsonFromText(fixedText);
+            
+            if (typeof data.curriculum !== 'string' || !Array.isArray(data.tasks)) {
+                throw new Error("Invalid JSON structure after fixing.");
+            }
+
+            const sections = parseSectionsFromMarkdown(data.curriculum);
+            if (sections.length === 0) {
+                throw new Error("Could not parse a curriculum from the fixed model's response markdown.");
+            }
+            const tasks = data.tasks.filter((t: any) => typeof t === 'string');
+            return { sections, tasks };
+
+        } catch (fixError) {
+            console.error("Failed to parse JSON for curriculum even after fixing:", text, fixError);
+            // Fallback for models that fail JSON: try to parse markdown directly
+            const sections = parseSectionsFromMarkdown(text);
+            if (sections.length > 0) {
+                return { sections, tasks: [] }; // Return sections but no tasks
+            }
+            throw new Error("Could not parse a curriculum from the model's response.");
+        }
+    }
 }
 
 export async function generateTopicFromFiles(files: FileAttachment[], settings: Settings): Promise<string> {

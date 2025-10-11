@@ -1,6 +1,5 @@
-import { PROVIDERS } from "./constants";
 
-export type Provider = keyof typeof PROVIDERS;
+export type Provider = 'google' | 'openai' | 'anthropic' | 'mistral' | 'openrouter';
 export type ApiKeyStatus = 'unverified' | 'valid' | 'invalid' | 'ratelimited';
 
 export enum Role {
