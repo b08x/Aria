@@ -15,6 +15,8 @@ import { PaperclipIcon } from './icons/PaperclipIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { ArrowRightCircleIcon } from './icons/ArrowRightCircleIcon';
 import { GlobeAltIcon } from './icons/GlobeAltIcon';
+import { ClipboardDocumentIcon } from './icons/ClipboardDocumentIcon';
+import { CheckIcon } from './icons/CheckIcon';
 
 interface MessageProps {
   message: MessageType;
@@ -31,6 +33,62 @@ interface MessageProps {
     currentLoadingId: string | null;
   }
 }
+
+interface CodeBlockProps {
+    node?: any;
+    inline?: boolean;
+    className?: string;
+    children?: React.ReactNode;
+    [key: string]: any;
+}
+
+// New component for rendering code blocks with line numbers and a copy button.
+const CodeBlock: React.FC<CodeBlockProps> = ({ node, inline, className, children, ...props }) => {
+    const [isCopied, setIsCopied] = useState(false);
+    
+    // For inline code (`code`), render a standard <code> tag without special styling.
+    if (inline) {
+        return (
+            <code className={className} {...props}>
+                {children}
+            </code>
+        );
+    }
+    
+    const match = /language-(\w+)/.exec(className || '');
+    // `children` can be an array, so we'll flatten it to a string.
+    const codeString = String(children).replace(/\n$/, '');
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(codeString).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        });
+    };
+    
+    // For code blocks (```code```), add syntax highlighting, line numbers, and a copy button.
+    return (
+        <div className="relative group/code">
+            <button
+                onClick={handleCopy}
+                className="absolute top-2 right-2 z-10 p-1.5 bg-surface border border-muted/50 rounded-md text-secondary opacity-0 group-hover/code:opacity-100 transition-opacity focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent"
+                aria-label="Copy code to clipboard"
+            >
+                {isCopied ? <CheckIcon className="w-4 h-4 text-green-400" /> : <ClipboardDocumentIcon className="w-4 h-4" />}
+            </button>
+            <SyntaxHighlighter
+                style={tomorrow}
+                language={match ? match[1] : undefined}
+                PreTag="div" // Use a div to avoid nesting <pre> tags, react-markdown provides the outer one.
+                showLineNumbers
+                lineNumberStyle={{ color: '#5c6f7e', opacity: 0.7, userSelect: 'none', paddingRight: '1em' }}
+                {...props}
+            >
+                {codeString}
+            </SyntaxHighlighter>
+        </div>
+    );
+};
 
 const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGenerateDiagram, onGenerateImage, onSubtopicClick, onContinue, ttsSettings }) => {
   const isUser = message.role === Role.USER;
@@ -122,24 +180,7 @@ const Message: React.FC<MessageProps> = ({ message, isLoading, onElaborate, onGe
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[rehypeRaw]}
                             components={{
-                                pre: ({node, ...props}) => <>{props.children}</>,
-                                code({node, className, children, ...props}) {
-                                    const match = /language-(\w+)/.exec(className || '');
-                                    return match ? (
-                                        <SyntaxHighlighter
-                                            style={tomorrow}
-                                            language={match[1]}
-                                            PreTag="pre"
-                                            {...props}
-                                        >
-                                            {String(children).replace(/\n$/, '')}
-                                        </SyntaxHighlighter>
-                                    ) : (
-                                        <code className={className} {...props}>
-                                            {children}
-                                        </code>
-                                    );
-                                }
+                                code: CodeBlock,
                             }}
                         >{contentToShow}</ReactMarkdown>
                     </div>

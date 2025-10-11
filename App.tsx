@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [sessionNotes, setSessionNotes] = useState<Record<string, string>>({});
   const [viewingDiagram, setViewingDiagram] = useState<SavedDiagram | null>(null);
   const [initialContextFiles, setInitialContextFiles] = useState<FileAttachment[]>([]);
+  const [completedLessons, setCompletedLessons] = useState<Set<string>>(() => new Set());
   
   // Task Management State
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -71,8 +72,12 @@ const App: React.FC = () => {
       if (savedTasks) {
         setTasks(JSON.parse(savedTasks));
       }
+      const savedCompletedLessons = localStorage.getItem('aria-completed-lessons');
+      if (savedCompletedLessons) {
+        setCompletedLessons(new Set(JSON.parse(savedCompletedLessons)));
+      }
     } catch (error) {
-      console.error('Failed to load tasks from localStorage', error);
+      console.error('Failed to load data from localStorage', error);
     }
   }, []);
 
@@ -88,6 +93,15 @@ const App: React.FC = () => {
       console.error('Failed to save tasks to localStorage', error);
     }
   }, [tasks]);
+
+  // Save completed lessons to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('aria-completed-lessons', JSON.stringify(Array.from(completedLessons)));
+    } catch (error) {
+      console.error('Failed to save completed lessons to localStorage', error);
+    }
+  }, [completedLessons]);
   
   const handleCloseTutorial = () => {
     setShowTutorial(false);
@@ -120,8 +134,14 @@ Your primary goal is to provide clear, engaging, and well-structured answers. Us
 - **Emojis:** Integrate relevant emojis (like ✨, 💡, 📌, ✅, 🚀) to add personality and visual cues.
 - **Separators:** Use horizontal rules (---) to separate distinct sections of a long response.
 
-# Interaction Style
-Keep your answers focused and easy to digest. After providing your main response, ALWAYS CONCLUDE with a clear, specific, and relevant question to encourage deeper conversation. For example, ask "Would you like to explore how Python's list comprehensions are optimized under the hood?". Do not add a "Continue" button or any similar UI elements in your text.`;
+# Response Constraints
+Your responses MUST be concise and strictly adhere to the following limits. Do not exceed these constraints.
+- **Word Count:** Maximum 120 words.
+- **Character Count:** Maximum 700 characters.
+- **Sentence Count:** Maximum 9 sentences.
+- **Paragraphs:** Maximum 5 short paragraphs.
+
+After providing your main response, ALWAYS CONCLUDE with a clear, specific, and relevant question to encourage deeper conversation. For example, ask "Would you like to explore how Python's list comprehensions are optimized under the hood?". Do not add a "Continue" button or any similar UI elements in your text.`;
 
     if (initialContextFiles.length > 0) {
         const fileContext = initialContextFiles.map(file =>
@@ -512,6 +532,18 @@ Keep your answers focused and easy to digest. After providing your main response
       setTasks(prev => prev.map(task => task.id === id ? { ...task, text: newText.trim() } : task));
   };
   
+  const handleToggleLessonComplete = (lessonId: string) => {
+    setCompletedLessons(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(lessonId)) {
+        newSet.delete(lessonId);
+      } else {
+        newSet.add(lessonId);
+      }
+      return newSet;
+    });
+  };
+
   const renderPage = () => {
     switch(page) {
       case 'landing':
@@ -557,6 +589,8 @@ Keep your answers focused and easy to digest. After providing your main response
               onEditTask={handleEditTask}
               sessionNotes={sessionNotes}
               setSessionNotes={setSessionNotes}
+              completedLessons={completedLessons}
+              onToggleLessonComplete={handleToggleLessonComplete}
             />
             <ChatPanel
               messages={messages}
